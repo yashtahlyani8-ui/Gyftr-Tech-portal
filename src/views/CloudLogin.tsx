@@ -1,7 +1,20 @@
 import { useState } from "react";
-import { LogIn, ShieldAlert, Loader2 } from "lucide-react";
+import { ChevronRight, ShieldAlert, Loader2 } from "lucide-react";
 import { GyftrLogo } from "../GyftrLogo";
-import { signInWithPassword, signOutCloud } from "../auth";
+import { PEOPLE as SEED_PEOPLE } from "../seed";
+import { TEAMS } from "../workflow";
+import { initials, colorFor } from "../lib";
+import { switchProfile, signOutCloud } from "../auth";
+
+/** Name-keyed avatar, not id-keyed — the live people directory isn't loaded
+   yet at this point (it only loads post-auth), so PEOPLE_BY_ID is empty. */
+function NameAvatar({ name, size = 32 }: { name: string; size?: number }) {
+  return (
+    <div className="avatar" title={name} style={{ width: size, height: size, fontSize: size * 0.4, background: colorFor(name) }}>
+      {initials(name)}
+    </div>
+  );
+}
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -32,58 +45,44 @@ export function CloudNoAccess({ email }: { email: string }) {
         <ShieldAlert size={30} color="var(--rose-fg)" />
         <div style={{ fontSize: 13.5, fontWeight: 650 }}>No portal access for {email}</div>
         <p style={{ fontSize: 12.5, color: "var(--ink-mute)", margin: 0 }}>
-          You're signed in, but this email isn't provisioned in the org directory yet.
-          Ask PMO to add you to <code>people</code>.
+          This account isn't provisioned in the org directory yet.
         </p>
-        <button className="btn sm" onClick={() => signOutCloud()}>Sign out</button>
+        <button className="btn sm" onClick={() => signOutCloud()}>Back</button>
       </div>
     </Shell>
   );
 }
 
+/** Demo profile picker — real Supabase session under the hood (one shared
+   demo password), so switching "who I am" is a single click. */
 export function CloudLogin() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
-    if (!email.trim() || !password || busy) return;
+  const pick = async (email: string) => {
     setError(null);
-    setBusy(true);
-    const res = await signInWithPassword(email, password);
-    setBusy(false);
-    if (!res.ok) setError(res.error ?? "Something went wrong.");
+    setPending(email);
+    const res = await switchProfile(email);
+    setPending(null);
+    if (!res.ok) setError(res.error ?? "Sign-in failed.");
   };
 
   return (
     <Shell>
       <p style={{ fontSize: 12.5, color: "var(--ink-mute)", margin: "3px 0 18px" }}>
-        Project flow · one source of truth. Sign in with your Gyftr account.
+        Project flow · one source of truth. Pick who you are — every action is logged against you.
       </p>
-      <div className="field">
-        <label>Work email</label>
-        <input
-          className="input" type="email" placeholder="you@gyftr.net" value={email} autoFocus
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-        />
-      </div>
-      <div className="field">
-        <label>Password</label>
-        <input
-          className="input" type="password" placeholder="••••••••" value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-        />
-      </div>
-      {error && <div style={{ fontSize: 12, color: "var(--rose-fg)", marginBottom: 10 }}>{error}</div>}
-      <button className="btn primary" style={{ width: "100%", justifyContent: "center" }} disabled={!email.trim() || !password || busy} onClick={submit}>
-        {busy ? <Loader2 size={14} className="spin" /> : <LogIn size={14} />} Sign in
-      </button>
-      <p style={{ fontSize: 11, color: "var(--ink-mute)", marginTop: 14, textAlign: "center" }}>
-        Forgot your password? Ask PMO to reset it.
-      </p>
+      {SEED_PEOPLE.map((p) => (
+        <button key={p.id} className="user-pick" disabled={!!pending} onClick={() => pick(p.email)}>
+          <NameAvatar name={p.name} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 650, fontSize: 13 }}>{p.name}</div>
+            <div style={{ fontSize: 11.5, color: "var(--ink-mute)" }}>{TEAMS[p.team].label} · {p.role}</div>
+          </div>
+          {pending === p.email ? <Loader2 size={16} className="spin" color="var(--ink-mute)" /> : <ChevronRight size={16} color="var(--ink-mute)" />}
+        </button>
+      ))}
+      {error && <div style={{ fontSize: 12, color: "var(--rose-fg)", marginTop: 10 }}>{error}</div>}
     </Shell>
   );
 }

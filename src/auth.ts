@@ -1,5 +1,8 @@
-/* ─── Cloud auth — Supabase email+password, gated to @gyftr.net + a
-   pre-seeded people row. No-op in local demo mode. ─── */
+/* ─── Cloud auth — demo profile picker, backed by real Supabase sessions.
+   RLS is keyed off auth.uid(), so every "profile" is still a genuine signed-in
+   session under the hood (one shared demo password) — picking a name just
+   skips typing credentials. Swap in real per-user passwords / SSO before
+   this is anything but a demo. No-op in local demo mode. ─── */
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, isCloud } from "./lib";
@@ -7,15 +10,18 @@ import { loadPeople } from "./people";
 import type { Person } from "./types";
 
 const ALLOWED_DOMAIN = "gyftr.net";
+const DEMO_PASSWORD = "GyftrTech@2026";
 
 export function isAllowedEmail(email: string): boolean {
   return email.trim().toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`);
 }
 
-export async function signInWithPassword(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
+/** Sign in (or switch) to a profile by email — one click, no password prompt. */
+export async function switchProfile(email: string): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: "Cloud mode is off." };
   if (!isAllowedEmail(email)) return { ok: false, error: `Use your @${ALLOWED_DOMAIN} email address.` };
-  const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: DEMO_PASSWORD });
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 

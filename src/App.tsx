@@ -22,6 +22,17 @@ import { Escalations } from "./views/Escalations";
 import { Drawer } from "./views/Drawer";
 import { CreateModal } from "./views/CreateModal";
 import { FilterBar, EMPTY_FILTERS, applyFilters, type Filters } from "./views/FilterBar";
+import { useToasts } from "./toast";
+
+function Toasts() {
+  const toasts = useToasts();
+  if (toasts.length === 0) return null;
+  return (
+    <div className="toasts">
+      {toasts.map((t) => <div key={t.id} className="toast">{t.text}</div>)}
+    </div>
+  );
+}
 
 const META: Record<ViewKey, { label: string; Icon: typeof Inbox; h: string; s: string }> = {
   queue:       { label: "My Queue",     Icon: Inbox,          h: "My Queue",     s: "Everything waiting in your court, most urgent first" },
@@ -176,6 +187,7 @@ export default function App() {
       </main>
 
       {creating && <CreateModal meId={me.id} onClose={(id) => { setCreating(false); if (id) setOpenId(id); }} />}
+      <Toasts />
     </div>
   );
 }

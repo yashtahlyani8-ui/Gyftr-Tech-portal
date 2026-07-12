@@ -7,6 +7,15 @@ import { useEffect, useState } from "react";
 import type { Project, StageId, StatusId, Comment, SubTask, HistoryEntry, Attachment, DocKind } from "./types";
 import { supabase } from "./lib";
 import { STATUSES } from "./workflow";
+import { toast } from "./toast";
+
+/** Every optimistic write funnels its failure through here: tell the user,
+ *  then refetch so the UI snaps back to server truth instead of lying. */
+function writeFailed(what: string, message: string) {
+  console.error(`${what}:`, message);
+  toast(`${what} — the change was rolled back. (${message})`);
+  fetchAll();
+}
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -94,14 +103,14 @@ export function useProjects(): Project[] {
 async function patchProject(id: string, patch: Row) {
   if (!supabase) return;
   const { error } = await supabase.from("projects").update(patch).eq("id", id);
-  if (error) console.error("Update failed:", error.message);
+  if (error) writeFailed("Couldn't save that change", error.message);
 }
 async function insertHistory(projectId: string, byId: string, fromStage: StageId | null, toStage: StageId, fromStatus: StatusId | null, toStatus: StatusId, note?: string) {
   if (!supabase) return;
   const { error } = await supabase.from("stage_history").insert({
     project_id: projectId, by_id: byId, from_stage: fromStage, to_stage: toStage, from_status: fromStatus, to_status: toStatus, note,
   });
-  if (error) console.error("History insert failed:", error.message);
+  if (error) console.error("History insert failed:", error.message); // history is best-effort; the move itself already saved
 }
 
 /* ── Actions — mirror localStore.ts's signatures exactly ── */
@@ -116,7 +125,7 @@ export function transition(id: string, byId: string, spec: { to: StageId; toStat
   const blocked = STATUSES[spec.toStatus].kind === "blocked";
   const stageEnteredAt = Date.now();
   localPatch(id, { stage: spec.to, status: spec.toStatus, ownerId: newOwnerId, blocked, blockReason: blocked ? p.blockReason : undefined, stageEnteredAt });
-  patchProject(id, { stage: spec.to, status: spec.toStatus, owner_id: newOwnerId, blocked, stage_entered_at: new Date(stageEnteredAt).toISOString() });
+  patchProject(id, { stage: spec.to, status: spec.toStatus, owner_id: newOwnerId, blocked, block_reason: blocked ? p.blockReason ?? null : null, stage_entered_at: new Date(stageEnteredAt).toISOString() });
   insertHistory(id, byId, p.stage, spec.to, p.status, spec.toStatus, spec.label);
 }
 
@@ -172,7 +181,7 @@ export function addComment(id: string, byId: string, text: string, pinned = fals
   const p = findProject(id);
   if (p) localPatch(id, { comments: [...p.comments, c] });
   supabase.from("comments").insert({ project_id: id, by_id: byId, text, pinned }).then(({ error }) => {
-    if (error) console.error("Comment insert failed:", error.message); else fetchAll();
+    if (error) writeFailed("Comment didn't post", error.message); else fetchAll();
   });
 }
 
@@ -181,14 +190,14 @@ export function resolveNote(id: string, commentId: string) {
   if (p) localPatch(id, { comments: p.comments.map((c) => (c.id === commentId ? { ...c, resolved: true } : c)) });
   if (!supabase) return;
   supabase.from("comments").update({ resolved: true }).eq("id", commentId).then(({ error }) => {
-    if (error) console.error("Resolve failed:", error.message);
+    if (error) writeFailed("Couldn't resolve the note", error.message);
   });
 }
 
 export function addAttachment(id: string, byId: string, name: string, kind: DocKind, url?: string) {
   if (!supabase) return;
   supabase.from("attachments").insert({ project_id: id, by_id: byId, name, kind, url }).then(({ error }) => {
-    if (error) console.error("Attachment insert failed:", error.message); else fetchAll();
+    if (error) writeFailed("Document didn't attach", error.message); else fetchAll();
   });
 }
 
@@ -198,14 +207,14 @@ export function toggleSubtask(id: string, subId: string) {
   localPatch(id, { subtasks: p.subtasks.map((s) => (s.id === subId ? { ...s, done: !s.done } : s)) });
   if (!supabase) return;
   supabase.from("subtasks").update({ done: !sub.done }).eq("id", subId).then(({ error }) => {
-    if (error) console.error("Subtask update failed:", error.message);
+    if (error) writeFailed("Sub-task didn't update", error.message);
   });
 }
 
 export function addSubtask(id: string, sub: Omit<SubTask, "id">) {
   if (!supabase) return;
   supabase.from("subtasks").insert({ project_id: id, title: sub.title, team: sub.team, assignee_id: sub.assigneeId ?? null, done: sub.done }).then(({ error }) => {
-    if (error) console.error("Subtask insert failed:", error.message); else fetchAll();
+    if (error) writeFailed("Sub-task didn't save", error.message); else fetchAll();
   });
 }
 
@@ -214,7 +223,7 @@ export function removeSubtask(id: string, subId: string) {
   localPatch(id, { subtasks: p.subtasks.filter((s) => s.id !== subId) });
   if (!supabase) return;
   supabase.from("subtasks").delete().eq("id", subId).then(({ error }) => {
-    if (error) console.error("Subtask delete failed:", error.message);
+    if (error) writeFailed("Sub-task didn't delete", error.message);
   });
 }
 
@@ -223,7 +232,7 @@ export function reassignSubtask(id: string, subId: string, assigneeId: string | 
   localPatch(id, { subtasks: p.subtasks.map((s) => (s.id === subId ? { ...s, assigneeId } : s)) });
   if (!supabase) return;
   supabase.from("subtasks").update({ assignee_id: assigneeId ?? null }).eq("id", subId).then(({ error }) => {
-    if (error) console.error("Subtask reassign failed:", error.message);
+    if (error) writeFailed("Sub-task didn't reassign", error.message);
   });
 }
 

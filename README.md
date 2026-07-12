@@ -21,25 +21,36 @@ Business Intake → Product Scoping → To Be Picked → Development → QA → 
 - **Statuses** (Scoping, In Dev, Need Bug Fixing, UAT, Blocked, On Hold, …) map to the deck's workflow schema.
 - **Leadership View** — KPIs, pipeline distribution, "whose court" split, and an ageing watchlist = the CEO's one-glance replacement for the Excel.
 
-## Run it
+## Live
+
+Production: **https://gyftr-tech-portal.vercel.app** — multi-user, realtime-synced
+Supabase backend with row-level security enforcing per-team permissions server-side.
+Pick a profile on the login screen (real auth session under the hood); every action
+is logged against that person.
+
+## Run it locally
 
 ```bash
 npm install
 npm run dev        # http://localhost:5174
 ```
 
-Runs in **local demo mode** out of the box — seeded with real Gyftr partners, data
-persists in your browser. Pick a user on the login screen; actions are logged against you.
+With `.env` filled (`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`) it talks to the
+live backend; with them blank it falls back to **local demo mode** (seeded data,
+persists in your browser, cross-tab sync).
 
-## Go multi-user (Supabase)
+## Architecture
 
-1. Create a Supabase project, run [`supabase/schema.sql`](supabase/schema.sql).
-2. Copy `.env.example` → `.env` and fill `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`.
-3. Swap the localStorage internals in `src/store.ts` for Supabase queries (client is
-   already wired in `src/lib.ts`, and realtime mirrors the marketing portal's pattern).
+- `src/workflow.ts` — the state machine: stages, statuses, SLAs, legal transitions.
+- `src/roles.ts` — client-side permission model (mirrored server-side by RLS).
+- `src/store.ts` — dispatcher; `cloudStore.ts` (Supabase + realtime + optimistic
+  writes with visible rollback on failure) or `localStore.ts` (localStorage).
+- [`supabase/schema.sql`](supabase/schema.sql) — full schema, triggers, and the
+  RLS policies that make the DB enforce the same rules the UI shows.
 
 ## Roadmap
 
-- **Phase 1 (this):** data model, one Task ID + sub-tasks, board, statuses, leadership dashboard.
-- **Phase 2:** enforce workflow transitions (state machine), SLA breach alerts via
-  Edge Function → email / Slack, Google Workspace SSO.
+- **Phase 1 (shipped):** data model, sub-tasks with assignees, flow board,
+  role-scoped views, leadership dashboard, escalations, priority notes.
+- **Phase 2:** SLA breach alerts via Edge Function → email / Slack, per-user
+  passwords or Google Workspace SSO, file uploads to Supabase Storage.

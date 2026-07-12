@@ -106,14 +106,14 @@ export const SEED_PROJECTS: Project[] = [
     brd: "Support variable denomination vouchers for Luminous channel partners.",
     priority: "P1", stage: "qa", status: "qa",
     ownerId: "u_pooja", stageEnteredAt: ago(3), createdAt: ago(25),
-    targetGoLive: "2026-01-29",
+    targetGoLive: "2026-07-30",
     subtasks: [{ id: "s1", title: "Denomination config", team: "development", done: true }],
   }),
   base("TP-005", "Onboarding of Sterlite Electric", "Evolve Brands", "Channel Program", {
     brd: "Onboard Sterlite Electric (copy of Cera program setup).",
     priority: "P1", bifurcation: "B2B", stage: "development", status: "dev",
     ownerId: "u_anmol", stageEnteredAt: ago(6), createdAt: ago(22),
-    targetGoLive: "2026-04-14",
+    targetGoLive: "2026-07-26",
     subtasks: [
       { id: "s1", title: "Clone Cera config", team: "development", done: true },
       { id: "s2", title: "Brand theming", team: "design", done: false },
@@ -123,7 +123,7 @@ export const SEED_PROJECTS: Project[] = [
     brd: "Refresh the Bosch program UI to the new design system.",
     priority: "P1", stage: "to_be_picked", status: "to_be_picked",
     ownerId: "u_harshita", stageEnteredAt: ago(4), createdAt: ago(12),
-    targetGoLive: "2026-02-08",
+    targetGoLive: "2026-08-08",
     subtasks: [],
   }),
   base("TP-007", "Reward round-up wallet — DBS", "DBS", "Banking", {
@@ -157,7 +157,7 @@ export const SEED_PROJECTS: Project[] = [
     brd: "Variable denomination vouchers for Godrej Club One.",
     priority: "P1", stage: "pre_prod", status: "pending_prod_deployment",
     ownerId: "u_anmol", stageEnteredAt: ago(1), createdAt: ago(30),
-    targetGoLive: "2026-01-17",
+    targetGoLive: "2026-07-18",
     subtasks: [{ id: "s1", title: "Denomination config", team: "development", done: true }],
   }),
 ];

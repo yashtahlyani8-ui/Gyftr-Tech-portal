@@ -226,6 +226,10 @@ a.attach:hover { border-color: var(--pop); background: var(--pop-soft); }
 .user-pick:hover { border-color: var(--pop); background: var(--surface-2); }
 .user-pick:disabled { opacity: .6; cursor: default; }
 
+/* toasts — write-failure notices; must be visible over everything */
+.toasts { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast { background: var(--ink); color: #fff; font-size: 12.5px; font-weight: 600; padding: 10px 16px; border-radius: 9px; box-shadow: var(--sh-lg); max-width: min(520px, 90vw); animation: fadeUp .22s cubic-bezier(.2,.7,.2,1); }
+
 .empty { text-align: center; color: var(--ink-mute); padding: 44px 24px; }
 .empty svg { color: var(--pop); opacity: .55; margin-bottom: 12px; }
 

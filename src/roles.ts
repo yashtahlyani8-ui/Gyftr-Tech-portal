@@ -16,10 +16,13 @@ export function ownerTeam(p: Project): TeamId {
   return STAGE_BY_ID[p.stage].owner;
 }
 
-/** In *my* court right now — my team holds the ball (or it's personally assigned to me). */
+/** In *my* court right now — strictly: my TEAM holds the ball. Deliberately NOT
+ *  "or it's personally assigned to me": if data ever names an owner from another
+ *  team, that person must not keep acting on a court that isn't theirs — being
+ *  the named assignee grants visibility (see visibleTo), never cross-team action. */
 export function isMine(me: Person, proj: Project): boolean {
   if (proj.stage === "live") return false;
-  return proj.ownerId === me.id || ownerTeam(proj) === me.team;
+  return ownerTeam(proj) === me.team;
 }
 
 /** Every team that has been (or is) part of a project's journey. Keyed off the

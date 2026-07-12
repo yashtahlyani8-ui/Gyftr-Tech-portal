@@ -56,7 +56,7 @@ export const SEED_PROJECTS: Project[] = [
   base("TP-001", "Addition of Bill Payments, Flights & Hotels", "Godrej", "LLC", {
     brd: "Extend the Godrej loyalty catalogue with Bill Payments, Flights and Hotels. Wallet round-up logic and guidelines to be finalised with partner.",
     priority: "P0", bifurcation: "B2B", stage: "uat", status: "qa_clarification_pending",
-    ownerId: "u_pooja", businessOwnerId: "u_anjali", blocked: true,
+    ownerId: "u_anjali", businessOwnerId: "u_anjali", blocked: true,
     blockReason: "Cleartrip staging API not working — Bills & Utilities API failing frequently.",
     stageEnteredAt: ago(9), createdAt: ago(48),
     targetGoLive: "2026-06-30", sacrosanctGoLive: "2026-04-30",

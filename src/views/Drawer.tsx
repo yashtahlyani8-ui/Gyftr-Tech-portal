@@ -45,6 +45,30 @@ function TransitionButton({
   );
 }
 
+/** When a stage has more than one legitimate forward path (e.g. Product can
+ *  route to Tech SPOC's queue, or straight to a specific dev), this is one
+ *  merged "who's this for" picker spanning every team involved — pick the
+ *  person, the path (stage/status) follows from whichever team they're on. */
+function ForwardPicker({ forwards, me, onFire }: { forwards: TransitionSpec[]; me: Person; onFire: (spec: TransitionSpec, ownerId: string) => void }) {
+  const options = forwards.flatMap((spec) => PEOPLE.filter((p) => p.team === spec.ownerTeam).map((person) => ({ person, spec })));
+  const defaultId = ownerForTransition(forwards[0], me);
+  const [selectedId, setSelectedId] = useState(() => (options.some((o) => o.person.id === defaultId) ? defaultId : options[0]?.person.id ?? ""));
+  const selected = options.find((o) => o.person.id === selectedId) ?? options[0];
+  if (!selected) return null;
+  return (
+    <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+      {options.length > 1 && (
+        <select className="select" style={{ flex: 1, minWidth: 0 }} value={selected.person.id} onChange={(e) => setSelectedId(e.target.value)} title="Who exactly is this for?">
+          {options.map((o) => <option key={o.person.id} value={o.person.id}>{o.person.name} · {TEAMS[o.spec.ownerTeam].label}</option>)}
+        </select>
+      )}
+      <button className="btn primary" style={{ flex: "none" }} onClick={() => onFire(selected.spec, selected.person.id)}>
+        {selected.spec.label} <ArrowRight size={14} />
+      </button>
+    </div>
+  );
+}
+
 /** One sub-task row: toggle done, reassign to anyone (not just its own team), remove. */
 function SubtaskRow({ s, project, me }: { s: SubTask; project: Project; me: Person }) {
   const [reassigning, setReassigning] = useState(false);
@@ -172,10 +196,8 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
               </div>
             </div>
             {availableForwards.length > 0 && (
-              <div style={{ marginTop: 11, display: "flex", flexDirection: "column", gap: 8 }}>
-                {availableForwards.map((f) => (
-                  <TransitionButton key={f.to + f.kind} spec={f} me={me} primary onFire={doTransition} />
-                ))}
+              <div style={{ marginTop: 11 }}>
+                <ForwardPicker forwards={availableForwards} me={me} onFire={doTransition} />
               </div>
             )}
             {!anyAction && (

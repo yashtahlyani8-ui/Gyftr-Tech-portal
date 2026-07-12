@@ -11,10 +11,14 @@ export function CreateModal({ meId, onClose }: { meId: string; onClose: (created
   const [lob, setLob] = useState("Channel Program");
   const [priority, setPriority] = useState<Priority>("P1");
   const [bifurcation, setBifurcation] = useState<"B2B" | "B2C">("B2C");
-  const [businessOwnerId, setBusinessOwnerId] = useState("u_anjali");
   const [target, setTarget] = useState("");
 
   const businessPeople = PEOPLE.filter((p) => p.team === "business" || p.team === "product");
+  // Default to whoever's actually logged in if they're eligible to be "raised by";
+  // otherwise fall back to the first business/product person rather than a dead id.
+  const [businessOwnerId, setBusinessOwnerId] = useState(
+    () => (businessPeople.some((p) => p.id === meId) ? meId : businessPeople[0]?.id ?? meId)
+  );
   const valid = title.trim() && partner.trim();
 
   const [saving, setSaving] = useState(false);

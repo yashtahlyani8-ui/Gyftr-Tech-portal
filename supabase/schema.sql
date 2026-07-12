@@ -71,13 +71,18 @@ create index on projects (stage);
 create index on projects using gin (involved_teams);
 
 -- Keep owner_team + involved_teams correct on every write → RLS stays accurate.
+-- Folds in my_team() (the acting user's own team), not just the new owner:
+-- without it, e.g. Product creating a project on Business's behalf sets
+-- involved_teams to {business} only, and the creator can't even SELECT the
+-- row they just inserted back (RETURNING is itself subject to the SELECT
+-- policy) — Postgres reports that identically to a WITH CHECK failure.
 create or replace function sync_project_scope() returns trigger language plpgsql as $$
 begin
   new.owner_team := stage_owner(new.stage);
   new.involved_teams := (
     select array(select distinct unnest(
       coalesce(old.involved_teams, array['business']::team_id[])
-      || new.owner_team || 'business'::team_id))
+      || new.owner_team || 'business'::team_id || coalesce(my_team(), new.owner_team)))
   );
   return new;
 end;

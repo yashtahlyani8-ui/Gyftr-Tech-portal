@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   ArrowLeft, ArrowRight, Send, CheckCircle2, Circle, Ban, MessageSquare,
-  Paperclip, Plus, Lock, CornerUpLeft, RotateCcw, Hand, Star, ExternalLink, Check, X,
+  Paperclip, Plus, Lock, CornerUpLeft, RotateCcw, Hand, Star, ExternalLink, Check, X, Repeat, UserCheck,
 } from "lucide-react";
 import type { Person, Project, StatusId, DocKind, TeamId, SubTask } from "../types";
 import {
@@ -111,6 +111,7 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
   const [attachName, setAttachName] = useState("");
   const [attachUrl, setAttachUrl] = useState("");
   const [attachKind, setAttachKind] = useState<DocKind>("Link");
+  const [reassignOpen, setReassignOpen] = useState(false);
   const overseer = isOverseer(me);
   const [pinNote, setPinNote] = useState(overseer);
   const pins = project.comments.filter((c) => c.pinned);
@@ -194,7 +195,31 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{owner?.name}</div>
                 <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>{TEAMS[oTeam].label} · assigned {relTime(project.stageEnteredAt)} · {daysBetween(project.stageEnteredAt)}d in {STAGE_BY_ID[project.stage].label}</div>
               </div>
+              {can("assign", me, project) && !reassignOpen && (
+                <div style={{ display: "flex", gap: 6, flex: "none" }}>
+                  {project.ownerId !== me.id && (
+                    <button className="btn sm" title="Take this off their plate — assign it to yourself" onClick={() => reassign(project.id, me.id)}>
+                      <UserCheck size={13} /> Take it
+                    </button>
+                  )}
+                  <button className="icon-btn" style={{ width: 30, height: 30 }} title={`Hand this to someone else on ${TEAMS[oTeam].label}`} onClick={() => setReassignOpen(true)}>
+                    <Repeat size={14} />
+                  </button>
+                </div>
+              )}
             </div>
+            {can("assign", me, project) && reassignOpen && (
+              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>Reassign within {TEAMS[oTeam].label}</span>
+                <select
+                  className="select" autoFocus style={{ maxWidth: 200 }} value={project.ownerId}
+                  onChange={(e) => { reassign(project.id, e.target.value); setReassignOpen(false); }}
+                  onBlur={() => setReassignOpen(false)}
+                >
+                  {PEOPLE.filter((p) => p.team === oTeam || p.id === project.ownerId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            )}
             {availableForwards.length > 0 && (
               <div style={{ marginTop: 11 }}>
                 <ForwardPicker forwards={availableForwards} me={me} onFire={doTransition} />
@@ -203,14 +228,6 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
             {!anyAction && (
               <div style={{ marginTop: 10, fontSize: 12, color: "var(--ink-mute)" }}>
                 This is in <b style={{ color: "var(--ink-soft)" }}>{TEAMS[oTeam].label}</b>'s court — you can comment, but only they can move it.
-              </div>
-            )}
-            {can("assign", me, project) && (
-              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>Assigned to</span>
-                <select className="select" style={{ maxWidth: 220 }} value={project.ownerId} onChange={(e) => reassign(project.id, e.target.value)}>
-                  {PEOPLE.filter((p) => p.team === oTeam || p.id === project.ownerId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
               </div>
             )}
           </div>

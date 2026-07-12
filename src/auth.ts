@@ -1,4 +1,4 @@
-/* ─── Cloud auth — Supabase email magic-link, gated to @gyftr.net + a
+/* ─── Cloud auth — Supabase email+password, gated to @gyftr.net + a
    pre-seeded people row. No-op in local demo mode. ─── */
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
@@ -12,13 +12,10 @@ export function isAllowedEmail(email: string): boolean {
   return email.trim().toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`);
 }
 
-export async function sendMagicLink(email: string): Promise<{ ok: boolean; error?: string }> {
+export async function signInWithPassword(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: "Cloud mode is off." };
   if (!isAllowedEmail(email)) return { ok: false, error: `Use your @${ALLOWED_DOMAIN} email address.` };
-  const { error } = await supabase.auth.signInWithOtp({
-    email: email.trim().toLowerCase(),
-    options: { emailRedirectTo: window.location.origin },
-  });
+  const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 

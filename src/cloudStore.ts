@@ -1,0 +1,231 @@
+/* ─── Cloud store — reads/writes the live Supabase project, realtime-synced.
+   Used when VITE_SUPABASE_* is set. Same exported surface as localStore.ts;
+   store.ts picks between the two. RLS on the server enforces who can write
+   what — this file just shapes the requests and mirrors state optimistically
+   so the UI feels instant while the write is in flight. ─── */
+import { useEffect, useState } from "react";
+import type { Project, StageId, StatusId, Comment, SubTask, HistoryEntry, Attachment, DocKind } from "./types";
+import { supabase } from "./lib";
+import { STATUSES } from "./workflow";
+
+type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+const SELECT = "*, subtasks(*), stage_history(*), comments(*), attachments(*)";
+
+function mapSubtask(r: Row): SubTask {
+  return { id: r.id, title: r.title, team: r.team, done: r.done };
+}
+function mapHistory(r: Row): HistoryEntry {
+  return { id: r.id, at: Date.parse(r.at), byId: r.by_id, fromStage: r.from_stage, toStage: r.to_stage, fromStatus: r.from_status, toStatus: r.to_status, note: r.note ?? undefined };
+}
+function mapComment(r: Row): Comment {
+  return { id: r.id, at: Date.parse(r.at), byId: r.by_id, text: r.text, pinned: r.pinned, resolved: r.resolved };
+}
+function mapAttachment(r: Row): Attachment {
+  return { id: r.id, name: r.name, kind: r.kind as DocKind, url: r.url ?? undefined, byId: r.by_id, at: Date.parse(r.at) };
+}
+function mapProject(r: Row): Project {
+  return {
+    id: r.id, code: r.code, title: r.title, brd: r.brd ?? "", partner: r.partner, lob: r.lob ?? "",
+    priority: r.priority, bifurcation: r.bifurcation ?? "B2C",
+    stage: r.stage, status: r.status, ownerId: r.owner_id, businessOwnerId: r.business_owner_id,
+    blocked: r.blocked, blockReason: r.block_reason ?? undefined,
+    stageEnteredAt: Date.parse(r.stage_entered_at), createdAt: Date.parse(r.created_at),
+    targetGoLive: r.target_go_live, sacrosanctGoLive: r.sacrosanct_go_live,
+    subtasks: (r.subtasks ?? []).map(mapSubtask),
+    history: (r.stage_history ?? []).map(mapHistory).sort((a: HistoryEntry, b: HistoryEntry) => a.at - b.at),
+    comments: (r.comments ?? []).map(mapComment).sort((a: Comment, b: Comment) => a.at - b.at),
+    attachments: (r.attachments ?? []).map(mapAttachment).sort((a: Attachment, b: Attachment) => a.at - b.at),
+  };
+}
+
+let state: Project[] = [];
+const listeners = new Set<() => void>();
+function notify() { listeners.forEach((l) => l()); }
+function findProject(id: string): Project | undefined { return state.find((p) => p.id === id); }
+function localPatch(id: string, patch: Partial<Project>) {
+  state = state.map((p) => (p.id === id ? { ...p, ...patch } : p));
+  notify();
+}
+
+async function fetchAll() {
+  if (!supabase) return;
+  const { data, error } = await supabase.from("projects").select(SELECT).order("created_at", { ascending: false });
+  if (error) { console.error("Failed to load projects:", error.message); return; }
+  state = (data ?? []).map(mapProject);
+  notify();
+}
+
+let started = false;
+function ensureStarted() {
+  if (started || !supabase) return;
+  started = true;
+  fetchAll();
+  const client = supabase;
+  client
+    .channel("projects-live")
+    .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => fetchAll())
+    .on("postgres_changes", { event: "*", schema: "public", table: "subtasks" }, () => fetchAll())
+    .on("postgres_changes", { event: "*", schema: "public", table: "stage_history" }, () => fetchAll())
+    .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, () => fetchAll())
+    .on("postgres_changes", { event: "*", schema: "public", table: "attachments" }, () => fetchAll())
+    .subscribe();
+}
+
+export function useProjects(): Project[] {
+  const [, force] = useState(0);
+  useEffect(() => {
+    ensureStarted();
+    const l = () => force((n) => n + 1);
+    listeners.add(l);
+    return () => { listeners.delete(l); };
+  }, []);
+  return state;
+}
+
+async function patchProject(id: string, patch: Row) {
+  if (!supabase) return;
+  const { error } = await supabase.from("projects").update(patch).eq("id", id);
+  if (error) console.error("Update failed:", error.message);
+}
+async function insertHistory(projectId: string, byId: string, fromStage: StageId | null, toStage: StageId, fromStatus: StatusId | null, toStatus: StatusId, note?: string) {
+  if (!supabase) return;
+  const { error } = await supabase.from("stage_history").insert({
+    project_id: projectId, by_id: byId, from_stage: fromStage, to_stage: toStage, from_status: fromStatus, to_status: toStatus, note,
+  });
+  if (error) console.error("History insert failed:", error.message);
+}
+
+/* ── Actions — mirror localStore.ts's signatures exactly ── */
+
+export function moveToStage(id: string, toStage: StageId, byId: string, note?: string) {
+  // Kept for API parity with localStore; the app always calls transition()/pickUp() in cloud mode.
+  void id; void toStage; void byId; void note;
+}
+
+export function transition(id: string, byId: string, spec: { to: StageId; toStatus: StatusId; label: string }, newOwnerId: string) {
+  const p = findProject(id); if (!p) return;
+  const blocked = STATUSES[spec.toStatus].kind === "blocked";
+  const stageEnteredAt = Date.now();
+  localPatch(id, { stage: spec.to, status: spec.toStatus, ownerId: newOwnerId, blocked, blockReason: blocked ? p.blockReason : undefined, stageEnteredAt });
+  patchProject(id, { stage: spec.to, status: spec.toStatus, owner_id: newOwnerId, blocked, stage_entered_at: new Date(stageEnteredAt).toISOString() });
+  insertHistory(id, byId, p.stage, spec.to, p.status, spec.toStatus, spec.label);
+}
+
+export function setStatus(id: string, toStatus: StatusId, byId: string) {
+  const p = findProject(id); if (!p || p.status === toStatus) return;
+  const meta = STATUSES[toStatus];
+  const stageChanged = meta.stage !== p.stage && meta.kind !== "blocked";
+  const stageEnteredAt = stageChanged ? Date.now() : p.stageEnteredAt;
+  const toStage = stageChanged ? meta.stage : p.stage;
+  localPatch(id, { status: toStatus, stage: toStage, blocked: meta.kind === "blocked", stageEnteredAt });
+  patchProject(id, { status: toStatus, stage: toStage, blocked: meta.kind === "blocked", stage_entered_at: new Date(stageEnteredAt).toISOString() });
+  insertHistory(id, byId, p.stage, toStage, p.status, toStatus);
+}
+
+export function reassign(id: string, ownerId: string) {
+  localPatch(id, { ownerId });
+  patchProject(id, { owner_id: ownerId });
+}
+
+export function pickUp(id: string, byId: string) {
+  const p = findProject(id); if (!p || p.stage !== "to_be_picked") return;
+  const stageEnteredAt = Date.now();
+  localPatch(id, { stage: "development", status: "dev", ownerId: byId, blocked: false, stageEnteredAt });
+  patchProject(id, { stage: "development", status: "dev", owner_id: byId, blocked: false, stage_entered_at: new Date(stageEnteredAt).toISOString() });
+  insertHistory(id, byId, p.stage, "development", p.status, "dev", "Picked up");
+}
+
+export function requestClarification(id: string, byId: string, toStage: StageId, toStatus: StatusId, note: string, newOwnerId: string) {
+  const p = findProject(id); if (!p) return;
+  const stageEnteredAt = Date.now();
+  localPatch(id, { stage: toStage, status: toStatus, ownerId: newOwnerId, blocked: true, blockReason: note, stageEnteredAt });
+  patchProject(id, { stage: toStage, status: toStatus, owner_id: newOwnerId, blocked: true, block_reason: note, stage_entered_at: new Date(stageEnteredAt).toISOString() });
+  insertHistory(id, byId, p.stage, toStage, p.status, toStatus, `Clarification requested: ${note}`);
+}
+
+export function reopen(id: string, byId: string, note: string, devOwnerId: string) {
+  const p = findProject(id); if (!p) return;
+  const stageEnteredAt = Date.now();
+  localPatch(id, { stage: "development", status: "need_bug_fixing", ownerId: devOwnerId, blocked: false, stageEnteredAt });
+  patchProject(id, { stage: "development", status: "need_bug_fixing", owner_id: devOwnerId, blocked: false, stage_entered_at: new Date(stageEnteredAt).toISOString() });
+  insertHistory(id, byId, p.stage, "development", p.status, "need_bug_fixing", `Reopened: ${note}`);
+}
+
+export function setBlock(id: string, blocked: boolean, reason?: string) {
+  localPatch(id, { blocked, blockReason: blocked ? reason : undefined });
+  patchProject(id, { blocked, block_reason: blocked ? reason ?? null : null });
+}
+
+export function addComment(id: string, byId: string, text: string, pinned = false) {
+  if (!supabase) return;
+  const tempId = `tmp_${Date.now()}`;
+  const c: Comment = { id: tempId, at: Date.now(), byId, text, pinned };
+  const p = findProject(id);
+  if (p) localPatch(id, { comments: [...p.comments, c] });
+  supabase.from("comments").insert({ project_id: id, by_id: byId, text, pinned }).then(({ error }) => {
+    if (error) console.error("Comment insert failed:", error.message); else fetchAll();
+  });
+}
+
+export function resolveNote(id: string, commentId: string) {
+  const p = findProject(id);
+  if (p) localPatch(id, { comments: p.comments.map((c) => (c.id === commentId ? { ...c, resolved: true } : c)) });
+  if (!supabase) return;
+  supabase.from("comments").update({ resolved: true }).eq("id", commentId).then(({ error }) => {
+    if (error) console.error("Resolve failed:", error.message);
+  });
+}
+
+export function addAttachment(id: string, byId: string, name: string, kind: DocKind, url?: string) {
+  if (!supabase) return;
+  supabase.from("attachments").insert({ project_id: id, by_id: byId, name, kind, url }).then(({ error }) => {
+    if (error) console.error("Attachment insert failed:", error.message); else fetchAll();
+  });
+}
+
+export function toggleSubtask(id: string, subId: string) {
+  const p = findProject(id); if (!p) return;
+  const sub = p.subtasks.find((s) => s.id === subId); if (!sub) return;
+  localPatch(id, { subtasks: p.subtasks.map((s) => (s.id === subId ? { ...s, done: !s.done } : s)) });
+  if (!supabase) return;
+  supabase.from("subtasks").update({ done: !sub.done }).eq("id", subId).then(({ error }) => {
+    if (error) console.error("Subtask update failed:", error.message);
+  });
+}
+
+export function addSubtask(id: string, sub: Omit<SubTask, "id">) {
+  if (!supabase) return;
+  supabase.from("subtasks").insert({ project_id: id, title: sub.title, team: sub.team, done: sub.done }).then(({ error }) => {
+    if (error) console.error("Subtask insert failed:", error.message); else fetchAll();
+  });
+}
+
+export async function createProject(
+  input: Omit<Project, "id" | "code" | "createdAt" | "stageEnteredAt" | "history" | "comments" | "subtasks" | "attachments"> & { subtasks?: SubTask[] }
+): Promise<Project> {
+  if (!supabase) throw new Error("Cloud mode is off.");
+  const { data, error } = await supabase
+    .from("projects")
+    .insert({
+      title: input.title, brd: input.brd, partner: input.partner, lob: input.lob,
+      priority: input.priority, bifurcation: input.bifurcation, stage: input.stage, status: input.status,
+      owner_id: input.ownerId, business_owner_id: input.businessOwnerId,
+      blocked: input.blocked, block_reason: input.blockReason ?? null,
+      target_go_live: input.targetGoLive, sacrosanct_go_live: input.sacrosanctGoLive,
+    })
+    .select(SELECT)
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Create failed");
+  const proj = mapProject(data);
+  if (input.subtasks?.length) {
+    await supabase.from("subtasks").insert(input.subtasks.map((s) => ({ project_id: proj.id, title: s.title, team: s.team, done: s.done })));
+  }
+  await insertHistory(proj.id, input.businessOwnerId, null, input.stage, null, input.status, "Project created");
+  await fetchAll();
+  return findProject(proj.id) ?? proj;
+}
+
+export function resetDemo() {
+  console.warn("resetDemo is a no-op in cloud mode — this would wipe shared production data.");
+}

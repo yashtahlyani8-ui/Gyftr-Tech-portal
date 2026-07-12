@@ -12,8 +12,14 @@ export function CreateModal({ meId, onClose }: { meId: string; onClose: (created
   const [priority, setPriority] = useState<Priority>("P1");
   const [bifurcation, setBifurcation] = useState<"B2B" | "B2C">("B2C");
   const [target, setTarget] = useState("");
+  const [priorityMonth, setPriorityMonth] = useState("");
+  const [effort, setEffort] = useState("");
+  const [productSpocId, setProductSpocId] = useState("");
+  const [techLeadId, setTechLeadId] = useState("");
 
   const businessPeople = PEOPLE.filter((p) => p.team === "business" || p.team === "product");
+  const productPeople = PEOPLE.filter((p) => p.team === "product" || p.team === "tech_spoc");
+  const techPeople = PEOPLE.filter((p) => p.team === "development");
   // Default to whoever's actually logged in if they're eligible to be "raised by";
   // otherwise fall back to the first business/product person rather than a dead id.
   const [businessOwnerId, setBusinessOwnerId] = useState(
@@ -32,6 +38,9 @@ export function CreateModal({ meId, onClose }: { meId: string; onClose: (created
         priority, bifurcation, businessOwnerId, ownerId: businessOwnerId,
         stage: "intake", status: "business_clarification", blocked: false,
         targetGoLive: target || null, sacrosanctGoLive: null,
+        priorityMonth: priorityMonth.trim() || null, timelineEta: null,
+        devEffortDays: effort ? Number(effort) : null, reasonForDelay: null,
+        productSpocId: productSpocId || null, techLeadId: techLeadId || null,
       });
       onClose(p.id);
     } catch (err) {
@@ -87,6 +96,32 @@ export function CreateModal({ meId, onClose }: { meId: string; onClose: (created
             <div className="field">
               <label>Target go-live</label>
               <input className="input" type="date" value={target} onChange={(e) => setTarget(e.target.value)} />
+            </div>
+          </div>
+          <div className="row">
+            <div className="field">
+              <label>Priority month</label>
+              <input className="input" value={priorityMonth} onChange={(e) => setPriorityMonth(e.target.value)} placeholder="e.g. Aug'26" />
+            </div>
+            <div className="field">
+              <label>Est. dev effort (days)</label>
+              <input className="input" type="number" min="0" value={effort} onChange={(e) => setEffort(e.target.value)} placeholder="10" />
+            </div>
+          </div>
+          <div className="row">
+            <div className="field">
+              <label>Product SPOC</label>
+              <select className="select" value={productSpocId} onChange={(e) => setProductSpocId(e.target.value)}>
+                <option value="">—</option>
+                {productPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Tech lead</label>
+              <select className="select" value={techLeadId} onChange={(e) => setTechLeadId(e.target.value)}>
+                <option value="">—</option>
+                {techPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
             </div>
           </div>
           <div className="field">

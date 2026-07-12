@@ -65,7 +65,15 @@ create table projects (
   stage_entered_at   timestamptz not null default now(),
   created_at         timestamptz not null default now(),
   target_go_live     date,
-  sacrosanct_go_live date
+  sacrosanct_go_live date,
+  -- PM Activity List sheet parity:
+  priority_month     text,
+  timeline_eta       date,
+  dev_effort_days    int,
+  reason_for_delay   text,
+  product_spoc_id    uuid references people(id),
+  tech_lead_id       uuid references people(id),
+  final_go_live      date  -- stamped automatically by trg_scope on going live
 );
 create index on projects (stage);
 create index on projects using gin (involved_teams);
@@ -79,6 +87,10 @@ create index on projects using gin (involved_teams);
 create or replace function sync_project_scope() returns trigger language plpgsql as $$
 begin
   new.owner_team := stage_owner(new.stage);
+  -- Final go-live stamps itself the moment a project reaches Live.
+  if new.stage = 'live' and new.final_go_live is null then
+    new.final_go_live := current_date;
+  end if;
   new.involved_teams := (
     select array(select distinct unnest(
       coalesce(old.involved_teams, array['business']::team_id[])

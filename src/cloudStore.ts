@@ -41,6 +41,9 @@ function mapProject(r: Row): Project {
     blocked: r.blocked, blockReason: r.block_reason ?? undefined,
     stageEnteredAt: Date.parse(r.stage_entered_at), createdAt: Date.parse(r.created_at),
     targetGoLive: r.target_go_live, sacrosanctGoLive: r.sacrosanct_go_live,
+    priorityMonth: r.priority_month, timelineEta: r.timeline_eta, devEffortDays: r.dev_effort_days,
+    reasonForDelay: r.reason_for_delay, productSpocId: r.product_spoc_id, techLeadId: r.tech_lead_id,
+    finalGoLive: r.final_go_live,
     subtasks: (r.subtasks ?? []).map(mapSubtask).sort((a: SubTask, b: SubTask) => (a.createdAt ?? 0) - (b.createdAt ?? 0)),
     history: (r.stage_history ?? []).map(mapHistory).sort((a: HistoryEntry, b: HistoryEntry) => a.at - b.at),
     comments: (r.comments ?? []).map(mapComment).sort((a: Comment, b: Comment) => a.at - b.at),
@@ -124,9 +127,30 @@ export function transition(id: string, byId: string, spec: { to: StageId; toStat
   const p = findProject(id); if (!p) return;
   const blocked = STATUSES[spec.toStatus].kind === "blocked";
   const stageEnteredAt = Date.now();
-  localPatch(id, { stage: spec.to, status: spec.toStatus, ownerId: newOwnerId, blocked, blockReason: blocked ? p.blockReason : undefined, stageEnteredAt });
+  // final_go_live is stamped by the DB trigger; mirror it optimistically
+  const finalGoLive = spec.to === "live" && !p.finalGoLive ? new Date().toISOString().slice(0, 10) : p.finalGoLive;
+  localPatch(id, { stage: spec.to, status: spec.toStatus, ownerId: newOwnerId, blocked, blockReason: blocked ? p.blockReason : undefined, stageEnteredAt, finalGoLive });
   patchProject(id, { stage: spec.to, status: spec.toStatus, owner_id: newOwnerId, blocked, block_reason: blocked ? p.blockReason ?? null : null, stage_entered_at: new Date(stageEnteredAt).toISOString() });
   insertHistory(id, byId, p.stage, spec.to, p.status, spec.toStatus, spec.label);
+}
+
+/** Sheet-parity planning fields — editable from the project page's Details rail. */
+export type DetailsPatch = Partial<Pick<Project,
+  "priorityMonth" | "timelineEta" | "devEffortDays" | "reasonForDelay" |
+  "productSpocId" | "techLeadId" | "targetGoLive" | "sacrosanctGoLive">>;
+
+export function updateDetails(id: string, patch: DetailsPatch) {
+  localPatch(id, patch);
+  const row: Row = {};
+  if ("priorityMonth" in patch) row.priority_month = patch.priorityMonth ?? null;
+  if ("timelineEta" in patch) row.timeline_eta = patch.timelineEta ?? null;
+  if ("devEffortDays" in patch) row.dev_effort_days = patch.devEffortDays ?? null;
+  if ("reasonForDelay" in patch) row.reason_for_delay = patch.reasonForDelay ?? null;
+  if ("productSpocId" in patch) row.product_spoc_id = patch.productSpocId ?? null;
+  if ("techLeadId" in patch) row.tech_lead_id = patch.techLeadId ?? null;
+  if ("targetGoLive" in patch) row.target_go_live = patch.targetGoLive ?? null;
+  if ("sacrosanctGoLive" in patch) row.sacrosanct_go_live = patch.sacrosanctGoLive ?? null;
+  patchProject(id, row);
 }
 
 export function setStatus(id: string, toStatus: StatusId, byId: string) {
@@ -237,7 +261,7 @@ export function reassignSubtask(id: string, subId: string, assigneeId: string | 
 }
 
 export async function createProject(
-  input: Omit<Project, "id" | "code" | "createdAt" | "stageEnteredAt" | "history" | "comments" | "subtasks" | "attachments"> & { subtasks?: SubTask[] }
+  input: Omit<Project, "id" | "code" | "createdAt" | "stageEnteredAt" | "finalGoLive" | "history" | "comments" | "subtasks" | "attachments"> & { subtasks?: SubTask[] }
 ): Promise<Project> {
   if (!supabase) throw new Error("Cloud mode is off.");
   const { data, error } = await supabase
@@ -248,6 +272,9 @@ export async function createProject(
       owner_id: input.ownerId, business_owner_id: input.businessOwnerId,
       blocked: input.blocked, block_reason: input.blockReason ?? null,
       target_go_live: input.targetGoLive, sacrosanct_go_live: input.sacrosanctGoLive,
+      priority_month: input.priorityMonth, timeline_eta: input.timelineEta,
+      dev_effort_days: input.devEffortDays, reason_for_delay: input.reasonForDelay,
+      product_spoc_id: input.productSpocId, tech_lead_id: input.techLeadId,
     })
     .select(SELECT)
     .single();

@@ -76,11 +76,21 @@ export function transition(
     blocked: STATUSES[spec.toStatus].kind === "blocked",
     blockReason: STATUSES[spec.toStatus].kind === "blocked" ? p.blockReason : undefined,
     stageEnteredAt: now(),
+    finalGoLive: spec.to === "live" && !p.finalGoLive ? new Date().toISOString().slice(0, 10) : p.finalGoLive,
     history: [
       ...p.history,
       { id: uid("h"), at: now(), byId, fromStage: p.stage, toStage: spec.to, fromStatus: p.status, toStatus: spec.toStatus, note: spec.label },
     ],
   }));
+}
+
+/** Sheet-parity planning fields — editable from the project page's Details rail. */
+export type DetailsPatch = Partial<Pick<Project,
+  "priorityMonth" | "timelineEta" | "devEffortDays" | "reasonForDelay" |
+  "productSpocId" | "techLeadId" | "targetGoLive" | "sacrosanctGoLive">>;
+
+export function updateDetails(id: string, patch: DetailsPatch) {
+  update(id, (p) => ({ ...p, ...patch }));
 }
 
 export function setStatus(id: string, toStatus: StatusId, byId: string) {
@@ -170,7 +180,7 @@ export function reassignSubtask(id: string, subId: string, assigneeId: string | 
   update(id, (p) => ({ ...p, subtasks: p.subtasks.map((s) => (s.id === subId ? { ...s, assigneeId } : s)) }));
 }
 
-export function createProject(input: Omit<Project, "id" | "code" | "createdAt" | "stageEnteredAt" | "history" | "comments" | "subtasks" | "attachments"> & { subtasks?: SubTask[] }) {
+export function createProject(input: Omit<Project, "id" | "code" | "createdAt" | "stageEnteredAt" | "finalGoLive" | "history" | "comments" | "subtasks" | "attachments"> & { subtasks?: SubTask[] }) {
   const n = state.length + 1;
   const code = `TP-${String(n).padStart(3, "0")}`;
   const proj: Project = {
@@ -179,6 +189,7 @@ export function createProject(input: Omit<Project, "id" | "code" | "createdAt" |
     code,
     createdAt: now(),
     stageEnteredAt: now(),
+    finalGoLive: null,
     subtasks: input.subtasks ?? [],
     comments: [],
     attachments: [],

@@ -115,6 +115,15 @@ export interface Project {
   targetGoLive: string | null;      // biz target (ISO)
   sacrosanctGoLive: string | null;  // committed date (ISO)
 
+  /* PM Activity List sheet parity — every column the Excel tracked */
+  priorityMonth: string | null;     // planning bucket, e.g. "Jan'26"
+  timelineEta: string | null;       // tech's ETA (ISO date)
+  devEffortDays: number | null;     // estimated dev effort
+  reasonForDelay: string | null;
+  productSpocId: string | null;
+  techLeadId: string | null;
+  finalGoLive: string | null;       // stamped automatically on go-live
+
   subtasks: SubTask[];
   history: HistoryEntry[];
   comments: Comment[];

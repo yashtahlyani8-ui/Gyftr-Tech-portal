@@ -10,8 +10,18 @@ import {
 } from "../workflow";
 import {
   transition, setStatus, setBlock, addComment, toggleSubtask, addSubtask, removeSubtask, reassignSubtask,
-  reassign, addAttachment, resolveNote,
+  reassign, addAttachment, resolveNote, updateDetails,
 } from "../store";
+
+/** One label/value row in the Details rail. */
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, minHeight: 24 }}>
+      <span style={{ color: "var(--ink-mute)", flex: "none" }}>{label}</span>
+      {children}
+    </div>
+  );
+}
 import { can, canPerformTransition, isOverseer, ownerTeam, ownerForTransition } from "../roles";
 import { PEOPLE, PEOPLE_BY_ID } from "../people";
 import { daysBetween, relTime, fmtDate } from "../lib";
@@ -372,26 +382,66 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
             </div>
           </div>
 
-          {/* Details / dates */}
+          {/* Details / planning — full PM Activity List sheet parity, editable in place */}
           <div className="panel" style={{ boxShadow: "none" }}>
             <div className="section-title">Details</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 9, fontSize: 12.5 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <span style={{ color: "var(--ink-mute)" }}>Raised by</span>
-                <b style={{ color: "var(--ink-soft)" }}>{PEOPLE_BY_ID[project.businessOwnerId]?.name}</b>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <span style={{ color: "var(--ink-mute)" }}>Target go-live</span>
-                <b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.targetGoLive)}</b>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <span style={{ color: "var(--ink-mute)" }}>Sacrosanct</span>
-                <b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.sacrosanctGoLive)}</b>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <span style={{ color: "var(--ink-mute)" }}>Created</span>
-                <b style={{ color: "var(--ink-soft)" }}>{relTime(project.createdAt)}</b>
-              </div>
+              <DetailRow label="Raised by"><b style={{ color: "var(--ink-soft)" }}>{PEOPLE_BY_ID[project.businessOwnerId]?.name}</b></DetailRow>
+              <DetailRow label="Priority month">
+                {canEdit
+                  ? <input className="input" style={{ maxWidth: 110, padding: "4px 8px", fontSize: 12, textAlign: "right" }} defaultValue={project.priorityMonth ?? ""} placeholder="Aug'26"
+                      onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== project.priorityMonth) updateDetails(project.id, { priorityMonth: v }); }} />
+                  : <b style={{ color: "var(--ink-soft)" }}>{project.priorityMonth ?? "—"}</b>}
+              </DetailRow>
+              <DetailRow label="Target go-live">
+                {canEdit
+                  ? <input className="input mono" type="date" style={{ maxWidth: 140, padding: "4px 8px", fontSize: 12 }} value={project.targetGoLive ?? ""}
+                      onChange={(e) => updateDetails(project.id, { targetGoLive: e.target.value || null })} />
+                  : <b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.targetGoLive)}</b>}
+              </DetailRow>
+              <DetailRow label="Timeline ETA">
+                {canEdit
+                  ? <input className="input mono" type="date" style={{ maxWidth: 140, padding: "4px 8px", fontSize: 12 }} value={project.timelineEta ?? ""}
+                      onChange={(e) => updateDetails(project.id, { timelineEta: e.target.value || null })} />
+                  : <b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.timelineEta)}</b>}
+              </DetailRow>
+              <DetailRow label="Sacrosanct">
+                {me.role === "pmo"
+                  ? <input className="input mono" type="date" style={{ maxWidth: 140, padding: "4px 8px", fontSize: 12 }} value={project.sacrosanctGoLive ?? ""}
+                      onChange={(e) => updateDetails(project.id, { sacrosanctGoLive: e.target.value || null })} />
+                  : <b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.sacrosanctGoLive)}</b>}
+              </DetailRow>
+              <DetailRow label="Final go-live"><b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.finalGoLive)}</b></DetailRow>
+              <DetailRow label="Dev effort">
+                {canEdit
+                  ? <input className="input mono" type="number" min="0" style={{ maxWidth: 80, padding: "4px 8px", fontSize: 12, textAlign: "right" }} defaultValue={project.devEffortDays ?? ""}
+                      onBlur={(e) => { const v = e.target.value === "" ? null : Number(e.target.value); if (v !== project.devEffortDays) updateDetails(project.id, { devEffortDays: v }); }} />
+                  : <b className="mono" style={{ color: "var(--ink-soft)" }}>{project.devEffortDays != null ? `${project.devEffortDays}d` : "—"}</b>}
+              </DetailRow>
+              <DetailRow label="Product SPOC">
+                {canEdit
+                  ? <select className="select sm" style={{ maxWidth: 140 }} value={project.productSpocId ?? ""} onChange={(e) => updateDetails(project.id, { productSpocId: e.target.value || null })}>
+                      <option value="">—</option>
+                      {PEOPLE.filter((p) => p.team === "product" || p.team === "tech_spoc").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  : <b style={{ color: "var(--ink-soft)" }}>{project.productSpocId ? PEOPLE_BY_ID[project.productSpocId]?.name : "—"}</b>}
+              </DetailRow>
+              <DetailRow label="Tech lead">
+                {canEdit
+                  ? <select className="select sm" style={{ maxWidth: 140 }} value={project.techLeadId ?? ""} onChange={(e) => updateDetails(project.id, { techLeadId: e.target.value || null })}>
+                      <option value="">—</option>
+                      {PEOPLE.filter((p) => p.team === "development").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  : <b style={{ color: "var(--ink-soft)" }}>{project.techLeadId ? PEOPLE_BY_ID[project.techLeadId]?.name : "—"}</b>}
+              </DetailRow>
+              <DetailRow label="Created"><b style={{ color: "var(--ink-soft)" }}>{relTime(project.createdAt)}</b></DetailRow>
+            </div>
+            <div style={{ marginTop: 11 }}>
+              <div style={{ fontSize: 11, color: "var(--ink-mute)", fontWeight: 700, marginBottom: 4 }}>Reason for delay</div>
+              {canEdit
+                ? <textarea className="input" style={{ minHeight: 48, fontSize: 12 }} defaultValue={project.reasonForDelay ?? ""} placeholder="Why did the date slip?"
+                    onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== project.reasonForDelay) updateDetails(project.id, { reasonForDelay: v }); }} />
+                : <div style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>{project.reasonForDelay ?? "—"}</div>}
             </div>
           </div>
 

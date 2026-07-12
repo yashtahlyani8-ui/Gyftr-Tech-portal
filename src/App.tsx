@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard, KanbanSquare, Table2, AlertOctagon, Inbox, Users,
   Plus, LogOut, RotateCcw, Cloud, HardDrive, Eye, PanelLeftClose, PanelLeftOpen,
@@ -54,6 +54,16 @@ export default function App() {
       return !c;
     });
   };
+
+  // Switching who's logged in (profile switch, sign-out/sign-in) must never leave
+  // the previous person's open project page, view, or filters showing by default.
+  useEffect(() => {
+    setOpenId(null);
+    setCreating(false);
+    setFilters(EMPTY_FILTERS);
+    if (me) setView(homeView(me));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.id]);
 
   const lobs = useMemo(() => [...new Set(projects.map((p) => p.lob))].sort(), [projects]);
   const myCount = useMemo(() => (me ? projects.filter((p) => isMine(me, p)).length : 0), [projects, me]);

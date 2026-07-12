@@ -56,6 +56,7 @@ export const TRANSITIONS: Record<StageId, TransitionSpec[]> = {
   ],
   scoping: [
     { to: "to_be_picked", label: "Send to Tech SPOC", toStatus: "to_be_picked", ownerTeam: "tech_spoc", kind: "forward" },
+    { to: "development", label: "Send straight to Dev", toStatus: "dev", ownerTeam: "development", kind: "forward" },
     { to: "intake", label: "Send back to Business", toStatus: "business_clarification", ownerTeam: "business", kind: "back" },
   ],
   to_be_picked: [

@@ -111,12 +111,15 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
   const sortedSubtasks = [...project.subtasks].sort((a, b) => Number(a.done) - Number(b.done) || (a.createdAt ?? 0) - (b.createdAt ?? 0));
 
   const specs = TRANSITIONS[project.stage];
-  const forward = specs.find((t) => t.kind === "forward");
+  // Some stages have more than one legitimate forward path (e.g. Product can
+  // route to Tech SPOC's queue, or straight to Dev if they already know who's
+  // picking it up) — show every one you're allowed to fire, not just the first.
+  const forwards = specs.filter((t) => t.kind === "forward");
   const backs = specs.filter((t) => t.kind !== "forward");
-  const canForward = !!forward && canPerformTransition(me, project, forward);
+  const availableForwards = forwards.filter((f) => canPerformTransition(me, project, f));
   const canBack = can("advance", me, project);
   const canEdit = can("status", me, project);
-  const anyAction = canForward || canBack || canEdit;
+  const anyAction = availableForwards.length > 0 || canBack || canEdit;
 
   const doTransition = (spec: TransitionSpec, ownerId: string) => {
     transition(project.id, me.id, spec, ownerId);
@@ -168,9 +171,11 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
                 <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>{TEAMS[oTeam].label} · assigned {relTime(project.stageEnteredAt)} · {daysBetween(project.stageEnteredAt)}d in {STAGE_BY_ID[project.stage].label}</div>
               </div>
             </div>
-            {canForward && forward && (
-              <div style={{ marginTop: 11 }}>
-                <TransitionButton spec={forward} me={me} primary onFire={doTransition} />
+            {availableForwards.length > 0 && (
+              <div style={{ marginTop: 11, display: "flex", flexDirection: "column", gap: 8 }}>
+                {availableForwards.map((f) => (
+                  <TransitionButton key={f.to + f.kind} spec={f} me={me} primary onFire={doTransition} />
+                ))}
               </div>
             )}
             {!anyAction && (

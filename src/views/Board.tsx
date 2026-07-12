@@ -3,7 +3,7 @@ import { AlertTriangle, Lock } from "lucide-react";
 import type { Person, Project, StageId } from "../types";
 import { STAGES, STAGE_BY_ID, transitionBetween } from "../workflow";
 import { transition } from "../store";
-import { can, isReadOnly, ownerForTransition, openLeadershipNote } from "../roles";
+import { can, canPerformTransition, isReadOnly, ownerForTransition, openLeadershipNote } from "../roles";
 import { Avatar, StatusPill, PriorityChip, AgingChip, OverdueTag, CeoNote } from "../ui";
 
 function Card({ project, draggable, onOpen }: { project: Project; draggable: boolean; onOpen: () => void }) {
@@ -54,9 +54,9 @@ export function Board({ projects, me, onOpen }: { projects: Project[]; me: Perso
 
   const handleDrop = (toStage: StageId, id: string) => {
     const proj = projects.find((p) => p.id === id);
-    if (!proj || !can("advance", me, proj)) return;
+    if (!proj) return;
     const spec = transitionBetween(proj.stage, toStage);          // only legal moves
-    if (!spec) return;
+    if (!spec || !canPerformTransition(me, proj, spec)) return;
     transition(id, me.id, spec, ownerForTransition(spec, me));
   };
 

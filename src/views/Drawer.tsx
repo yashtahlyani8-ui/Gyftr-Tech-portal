@@ -11,7 +11,7 @@ import {
 import {
   transition, setStatus, setBlock, addComment, toggleSubtask, reassign, addAttachment, resolveNote,
 } from "../store";
-import { can, isMine, isOverseer, ownerTeam, ownerForTransition } from "../roles";
+import { can, canPerformTransition, isOverseer, ownerTeam, ownerForTransition } from "../roles";
 import { PEOPLE, PEOPLE_BY_ID } from "../people";
 import { daysBetween, relTime, fmtDate } from "../lib";
 import { Avatar, StatusPill, PriorityChip, AgingChip, OverdueTag } from "../ui";
@@ -49,13 +49,20 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
   const specs = TRANSITIONS[project.stage];
   const forward = specs.find((t) => t.kind === "forward");
   const backs = specs.filter((t) => t.kind !== "forward");
-  const canForward = !!forward && (project.stage === "to_be_picked" ? can("pickup", me, project) : can("advance", me, project));
+  const canForward = !!forward && canPerformTransition(me, project, forward);
   const canBack = can("advance", me, project);
   const canEdit = can("status", me, project);
   const anyAction = canForward || canBack || canEdit;
 
-  const doTransition = (spec: TransitionSpec) => {
-    transition(project.id, me.id, spec, ownerForTransition(spec, me));
+  // Who exactly it's being handed to — defaults to the team lead, but with a
+  // handful of teams up to 3-4 people deep, picking the actual person beats
+  // guessing who "the lead" is.
+  const forwardCandidates = forward ? PEOPLE.filter((p) => p.team === forward.ownerTeam) : [];
+  const [forwardTo, setForwardTo] = useState<string>("");
+  const forwardToResolved = forward ? (forwardTo || ownerForTransition(forward, me)) : "";
+
+  const doTransition = (spec: TransitionSpec, ownerIdOverride?: string) => {
+    transition(project.id, me.id, spec, ownerIdOverride || ownerForTransition(spec, me));
     if (reason.trim() && spec.kind !== "forward") addComment(project.id, me.id, `[${spec.label}] ${reason.trim()}`);
     setReason("");
   };
@@ -91,12 +98,24 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{owner?.name}</div>
                 <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>{TEAMS[oTeam].label} · {daysBetween(project.stageEnteredAt)}d in {STAGE_BY_ID[project.stage].label}</div>
               </div>
-              {canForward && forward && (
-                <button className="btn primary" onClick={() => doTransition(forward)}>
+            </div>
+            {canForward && forward && (
+              <div style={{ marginTop: 11, display: "flex", gap: 7, alignItems: "center" }}>
+                {forwardCandidates.length > 1 && (
+                  <select
+                    className="select" style={{ flex: 1, minWidth: 0 }}
+                    value={forwardToResolved}
+                    onChange={(e) => setForwardTo(e.target.value)}
+                    title={`Who on ${TEAMS[forward.ownerTeam].label} is this for?`}
+                  >
+                    {forwardCandidates.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                )}
+                <button className="btn primary" style={{ flex: "none" }} onClick={() => doTransition(forward, forwardToResolved)}>
                   {forward.label} <ArrowRight size={14} />
                 </button>
-              )}
-            </div>
+              </div>
+            )}
             {!anyAction && (
               <div style={{ marginTop: 10, fontSize: 12, color: "var(--ink-mute)" }}>
                 This is in <b style={{ color: "var(--ink-soft)" }}>{TEAMS[oTeam].label}</b>'s court — you can comment, but only they can move it.

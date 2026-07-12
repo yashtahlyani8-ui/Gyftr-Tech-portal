@@ -67,6 +67,16 @@ export function can(action: Action, me: Person, proj?: Project): boolean {
   return isMine(me, proj);                           // otherwise: only the team in-court acts
 }
 
+/** Whether `me` can act on a *specific* transition. Almost always just `can("advance"/"pickup")`,
+ *  except marking something live: that's the deploying team's call, not PMO's — PMO directs the
+ *  process everywhere else, but shouldn't be the one clicking "go live" on someone else's deploy. */
+export function canPerformTransition(me: Person, proj: Project, spec: TransitionSpec): boolean {
+  const isGoLive = proj.stage === "pre_prod" && spec.kind === "forward" && spec.to === "live";
+  if (isGoLive) return isMine(me, proj);
+  if (proj.stage === "to_be_picked" && spec.kind === "forward") return can("pickup", me, proj);
+  return can("advance", me, proj);
+}
+
 /** Lead (or any member) of a team, to hand the ball to. */
 export function leadOf(team: string): string {
   const lead = PEOPLE.find((p) => p.team === team && p.role === "lead");

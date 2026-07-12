@@ -1,7 +1,7 @@
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import type { Person, Project } from "../types";
 import { STAGE_BY_ID, forwardOf, PRIORITY_META } from "../workflow";
-import { isMine, can, ownerForTransition, openLeadershipNote } from "../roles";
+import { isMine, canPerformTransition, ownerForTransition, openLeadershipNote } from "../roles";
 import { transition } from "../store";
 import { daysBetween } from "../lib";
 import { Avatar, StatusPill, PriorityChip, AgingChip, OverdueTag, CeoNote } from "../ui";
@@ -37,7 +37,7 @@ export function MyQueue({ projects, me, onOpen }: { projects: Project[]; me: Per
       <div className="grid stagger" style={{ gridTemplateColumns: "1fr" }}>
         {mine.map((p) => {
           const fwd = forwardOf(p.stage);
-          const canFwd = !!fwd && (p.stage === "to_be_picked" ? can("pickup", me, p) : can("advance", me, p));
+          const canFwd = !!fwd && canPerformTransition(me, p, fwd);
           return (
             <div key={p.id} className="panel" style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 18px", cursor: "pointer" }} onClick={() => onOpen(p.id)}>
               <span className="col-accent" style={{ background: STAGE_BY_ID[p.stage].color, height: 34, width: 4 }} />

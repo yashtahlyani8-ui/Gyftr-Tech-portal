@@ -72,16 +72,18 @@ export function CloudLogin() {
       <p style={{ fontSize: 12.5, color: "var(--ink-mute)", margin: "3px 0 18px" }}>
         Project flow · one source of truth. Pick who you are — every action is logged against you.
       </p>
-      {SEED_PEOPLE.map((p) => (
-        <button key={p.id} className="user-pick" disabled={!!pending} onClick={() => pick(p.email)}>
-          <NameAvatar name={p.name} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 650, fontSize: 13 }}>{p.name}</div>
-            <div style={{ fontSize: 11.5, color: "var(--ink-mute)" }}>{TEAMS[p.team].label} · {p.role}</div>
-          </div>
-          {pending === p.email ? <Loader2 size={16} className="spin" color="var(--ink-mute)" /> : <ChevronRight size={16} color="var(--ink-mute)" />}
-        </button>
-      ))}
+      <div className="user-pick-list">
+        {SEED_PEOPLE.map((p) => (
+          <button key={p.id} className="user-pick" disabled={!!pending} onClick={() => pick(p.email)}>
+            <NameAvatar name={p.name} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 650, fontSize: 13 }}>{p.name}</div>
+              <div style={{ fontSize: 11.5, color: "var(--ink-mute)" }}>{TEAMS[p.team].label} · {p.role}</div>
+            </div>
+            {pending === p.email ? <Loader2 size={16} className="spin" color="var(--ink-mute)" /> : <ChevronRight size={16} color="var(--ink-mute)" />}
+          </button>
+        ))}
+      </div>
       {error && <div style={{ fontSize: 12, color: "var(--rose-fg)", marginTop: 10 }}>{error}</div>}
     </Shell>
   );

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   LayoutDashboard, KanbanSquare, Table2, AlertOctagon, Inbox, Users,
-  Plus, LogOut, RotateCcw, Cloud, HardDrive, Eye,
+  Plus, LogOut, RotateCcw, Cloud, HardDrive, Eye, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import type { Person, ViewKey } from "./types";
 import { useProjects, resetDemo } from "./store";
@@ -47,6 +47,13 @@ export default function App() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("gtp_sidebar_collapsed") === "1");
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      localStorage.setItem("gtp_sidebar_collapsed", c ? "0" : "1");
+      return !c;
+    });
+  };
 
   const lobs = useMemo(() => [...new Set(projects.map((p) => p.lob))].sort(), [projects]);
   const myCount = useMemo(() => (me ? projects.filter((p) => isMine(me, p)).length : 0), [projects, me]);
@@ -79,45 +86,52 @@ export default function App() {
   const hotBadge = (k: ViewKey) => (k === "escalations" && escCount > 0) || (k === "queue" && myFlagged);
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="brand" style={{ flexDirection: "column", alignItems: "flex-start", gap: 5 }}>
-          <GyftrLogo h={22} />
-          <span style={{ fontSize: 10.5, color: "var(--ink-mute)", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", paddingLeft: 2 }}>Tech · Project Flow</span>
+    <div className={`app ${collapsed ? "sidebar-collapsed" : ""}`}>
+      <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
+        <div className="brand" style={{ flexDirection: "column", alignItems: collapsed ? "center" : "flex-start", gap: 5 }}>
+          {collapsed ? <div className="brand-mark">G</div> : <GyftrLogo h={22} />}
+          <span className="nav-label" style={{ fontSize: 10.5, color: "var(--ink-mute)", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", paddingLeft: 2 }}>Tech · Project Flow</span>
         </div>
 
         {nav.map((k) => {
           const it = META[k]; const b = badge(k);
           return (
-            <button key={k} className={`nav-item ${active === k ? "on" : ""}`} onClick={() => { setView(k); setFilters(EMPTY_FILTERS); }}>
-              <it.Icon size={17} /> {it.label}
+            <button key={k} className={`nav-item ${active === k ? "on" : ""}`} title={collapsed ? it.label : undefined}
+              onClick={() => { setView(k); setFilters(EMPTY_FILTERS); }}>
+              <it.Icon size={17} /> <span className="nav-label">{it.label}</span>
               {b ? <span className={`badge ${hotBadge(k) ? "hot" : ""}`}>{b}</span> : null}
             </button>
           );
         })}
 
-        <div className="nav-sep">Data</div>
-        <div className="nav-item" style={{ cursor: "default" }}>
-          {isCloud ? <Cloud size={16} /> : <HardDrive size={16} />} {isCloud ? "Supabase" : "Local demo"}
+        <div className="nav-sep">{collapsed ? "·" : "Data"}</div>
+        <div className="nav-item" style={{ cursor: "default" }} title={collapsed ? (isCloud ? "Supabase" : "Local demo") : undefined}>
+          {isCloud ? <Cloud size={16} /> : <HardDrive size={16} />} <span className="nav-label">{isCloud ? "Supabase" : "Local demo"}</span>
         </div>
         {!isCloud && (
-          <button className="nav-item" onClick={() => { if (confirm("Reset demo data?")) resetDemo(); }}>
-            <RotateCcw size={16} /> Reset demo
+          <button className="nav-item" title={collapsed ? "Reset demo" : undefined} onClick={() => { if (confirm("Reset demo data?")) resetDemo(); }}>
+            <RotateCcw size={16} /> <span className="nav-label">Reset demo</span>
           </button>
         )}
 
         <div style={{ flex: 1 }} />
 
+        <button className="nav-item" style={{ justifyContent: collapsed ? "center" : "flex-start" }} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={toggleCollapsed}>
+          {collapsed ? <PanelLeftOpen size={17} /> : <><PanelLeftClose size={17} /> <span className="nav-label">Collapse</span></>}
+        </button>
+
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 11px", borderTop: "1px solid var(--line)", marginTop: 6 }}>
           <Avatar id={me.id} size={32} />
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="nav-label" style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{me.name}</div>
             <div style={{ fontSize: 11, color: "var(--ink-mute)" }}>{TEAMS[me.team].label} · {me.role}</div>
           </div>
-          <button className="icon-btn" style={{ width: 30, height: 30 }} title={isCloud ? "Sign out" : "Switch user"}
-            onClick={() => { if (isCloud) { signOutCloud(); } else { setMeId(null); localStorage.removeItem("gtp_me"); } }}>
-            <LogOut size={15} />
-          </button>
+          {!collapsed && (
+            <button className="icon-btn" style={{ width: 30, height: 30 }} title={isCloud ? "Sign out" : "Switch user"}
+              onClick={() => { if (isCloud) { signOutCloud(); } else { setMeId(null); localStorage.removeItem("gtp_me"); } }}>
+              <LogOut size={15} />
+            </button>
+          )}
         </div>
       </aside>
 

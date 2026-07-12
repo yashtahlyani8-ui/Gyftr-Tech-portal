@@ -9,7 +9,7 @@ import { isCloud, daysBetween, overdueInfo } from "./lib";
 import { PEOPLE_BY_ID } from "./people";
 import { useCloudAuth, signOutCloud } from "./auth";
 import { TEAMS, STAGE_BY_ID, aging } from "./workflow";
-import { can, isMine, isReadOnly, homeView, navFor, visibleProjects, visibleTo, openLeadershipNote } from "./roles";
+import { can, isMine, isOverseer, isReadOnly, homeView, navFor, visibleProjects, visibleTo, openLeadershipNote } from "./roles";
 import { Avatar } from "./ui";
 import { GyftrLogo } from "./GyftrLogo";
 import { Login } from "./views/Login";
@@ -39,7 +39,7 @@ const META: Record<ViewKey, { label: string; Icon: typeof Inbox; h: string; s: s
   team:        { label: "My Team",      Icon: Users,          h: "My Team",      s: "Projects your team is involved in" },
   overview:    { label: "Overview",     Icon: LayoutDashboard, h: "Overview",    s: "Portfolio health, ownership and ageing at a glance" },
   board:       { label: "Flow Board",   Icon: KanbanSquare,   h: "Flow Board",   s: "The whole pipeline — drag a project to move it along" },
-  list:        { label: "All Projects", Icon: Table2,         h: "All Projects", s: "Every project, filterable" },
+  list:        { label: "All Projects", Icon: Table2,         h: "All Projects", s: "The PM sheet, live — every column, filterable, exportable" },
   escalations: { label: "Escalations",  Icon: AlertOctagon,   h: "Escalations",  s: "Blocked, overdue and SLA-breaching — who to chase" },
 };
 
@@ -98,8 +98,9 @@ export default function App() {
   const open = openCandidate && visibleTo(me, openCandidate) ? openCandidate : null;  // RLS guard: never open what you can't see
   const showFilters = active === "board" || active === "list" || active === "team";
 
-  // base data set per view (role scoping happens HERE)
-  const base = active === "team" ? visibleProjects(me, projects) : projects;
+  // base data set per view (role scoping happens HERE) — overseers see the whole
+  // portfolio; contributors always work from their involvement-scoped slice.
+  const base = isOverseer(me) ? projects : visibleProjects(me, projects);
   const filtered = applyFilters(base, filters);
 
   const badge = (k: ViewKey) => (k === "queue" ? myCount : k === "escalations" ? escCount : 0);

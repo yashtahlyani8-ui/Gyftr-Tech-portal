@@ -52,9 +52,11 @@ export function visibleProjects(me: Person, projects: Project[]): Project[] {
   return projects.filter((p) => visibleTo(me, p));
 }
 
-/** Navigation is role-specific — contributors and overseers get different apps. */
+/** Navigation is role-specific — contributors and overseers get different apps.
+ *  Everyone gets the sheet-style "All Projects" table (contributors see it
+ *  scoped to their involvement) — that view + CSV export is what retires the Excel. */
 export function navFor(me: Person): ViewKey[] {
-  return isOverseer(me) ? ["overview", "board", "list", "escalations"] : ["queue", "team"];
+  return isOverseer(me) ? ["overview", "board", "list", "escalations"] : ["queue", "team", "list"];
 }
 
 export function homeView(me: Person): ViewKey {

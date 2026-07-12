@@ -42,9 +42,11 @@ create or replace function stage_owner(s stage_id) returns team_id language sql 
     else 'leadership' end::team_id;
 $$;
 
+create sequence projects_code_seq;
+
 create table projects (
   id                 uuid primary key default gen_random_uuid(),
-  code               text unique not null,
+  code               text unique not null default ('TP-' || lpad(nextval('projects_code_seq')::text, 3, '0')),
   title              text not null,
   brd                text default '',
   partner            text not null,
@@ -148,7 +150,11 @@ create policy c_upd on comments for update using ( can_act(project_id) or by_id 
 
 -- attachments: involved teams (not pure observers) can add; anyone who sees the project can read
 create policy a_sel on attachments for select using ( can_see(project_id) );
-create policy a_ins on attachments for insert with check ( can_act(project_id) or my_team() = any((select involved_teams from projects where id = project_id)) );
+create policy a_ins on attachments for insert with check (
+  can_act(project_id) or exists (
+    select 1 from projects p where p.id = project_id and my_team() = any(p.involved_teams)
+  )
+);
 
 -- Realtime so every logged-in client updates the instant anything changes.
 alter publication supabase_realtime add table projects, subtasks, stage_history, comments, attachments;

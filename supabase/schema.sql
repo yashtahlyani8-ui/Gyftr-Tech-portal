@@ -93,7 +93,8 @@ create trigger trg_scope before insert or update of stage on projects
 create table subtasks (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade,
-  title text not null, team team_id not null, done boolean not null default false
+  title text not null, team team_id not null, assignee_id uuid references people(id),
+  done boolean not null default false, created_at timestamptz not null default now()
 );
 create table stage_history (
   id uuid primary key default gen_random_uuid(),

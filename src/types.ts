@@ -57,7 +57,9 @@ export interface SubTask {
   id: string;
   title: string;
   team: TeamId;
+  assigneeId?: string;   // specific person, not just the team
   done: boolean;
+  createdAt?: number;
 }
 
 export interface HistoryEntry {

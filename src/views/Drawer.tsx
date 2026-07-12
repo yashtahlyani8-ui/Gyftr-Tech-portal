@@ -3,13 +3,13 @@ import {
   X, ArrowRight, Send, CheckCircle2, Circle, Ban, MessageSquare,
   Paperclip, Plus, Lock, CornerUpLeft, RotateCcw, Hand, Star, ExternalLink, Check,
 } from "lucide-react";
-import type { Person, Project, StatusId, DocKind } from "../types";
+import type { Person, Project, StatusId, DocKind, TeamId, SubTask } from "../types";
 import {
   STAGES, STAGE_BY_ID, STAGE_ORDER, STATUSES, statusesForStage, TEAMS, TRANSITIONS,
   type TransitionSpec,
 } from "../workflow";
 import {
-  transition, setStatus, setBlock, addComment, toggleSubtask, reassign, addAttachment, resolveNote,
+  transition, setStatus, setBlock, addComment, toggleSubtask, addSubtask, reassign, addAttachment, resolveNote,
 } from "../store";
 import { can, canPerformTransition, isOverseer, ownerTeam, ownerForTransition } from "../roles";
 import { PEOPLE, PEOPLE_BY_ID } from "../people";
@@ -18,6 +18,31 @@ import { Avatar, StatusPill, PriorityChip, AgingChip, OverdueTag } from "../ui";
 
 const DOC_KINDS: DocKind[] = ["BRD", "PRD", "Figma", "HTML", "Doc"];
 const kindIcon = (k: string) => (k === "forward" ? Hand : k === "reopen" ? RotateCcw : CornerUpLeft);
+
+/** A transition action paired with an explicit "who exactly is this for" picker,
+ *  scoped to the receiving team — beats silently auto-assigning to a guessed lead. */
+function TransitionButton({
+  spec, me, primary, danger, onFire,
+}: { spec: TransitionSpec; me: Person; primary?: boolean; danger?: boolean; onFire: (spec: TransitionSpec, ownerId: string) => void }) {
+  const candidates = PEOPLE.filter((p) => p.team === spec.ownerTeam);
+  const [to, setTo] = useState(() => ownerForTransition(spec, me));
+  const Icon = kindIcon(spec.kind);
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      {candidates.length > 1 && (
+        <select
+          className={`select ${primary ? "" : "sm"}`} style={{ maxWidth: primary ? undefined : 130, flex: primary ? 1 : undefined, minWidth: 0 }}
+          value={to} onChange={(e) => setTo(e.target.value)} title={`Who on ${TEAMS[spec.ownerTeam].label} is this for?`}
+        >
+          {candidates.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      )}
+      <button className={`btn ${primary ? "primary" : "sm"} ${danger ? "danger" : ""}`} style={{ flex: "none" }} onClick={() => onFire(spec, to)}>
+        {primary ? <>{spec.label} <ArrowRight size={14} /></> : <><Icon size={14} /> {spec.label}</>}
+      </button>
+    </div>
+  );
+}
 
 export function Drawer({ project, me, onClose }: { project: Project; me: Person; onClose: () => void }) {
   const [comment, setComment] = useState("");
@@ -54,17 +79,22 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
   const canEdit = can("status", me, project);
   const anyAction = canForward || canBack || canEdit;
 
-  // Who exactly it's being handed to — defaults to the team lead, but with a
-  // handful of teams up to 3-4 people deep, picking the actual person beats
-  // guessing who "the lead" is.
-  const forwardCandidates = forward ? PEOPLE.filter((p) => p.team === forward.ownerTeam) : [];
-  const [forwardTo, setForwardTo] = useState<string>("");
-  const forwardToResolved = forward ? (forwardTo || ownerForTransition(forward, me)) : "";
-
-  const doTransition = (spec: TransitionSpec, ownerIdOverride?: string) => {
-    transition(project.id, me.id, spec, ownerIdOverride || ownerForTransition(spec, me));
+  const doTransition = (spec: TransitionSpec, ownerId: string) => {
+    transition(project.id, me.id, spec, ownerId);
     if (reason.trim() && spec.kind !== "forward") addComment(project.id, me.id, `[${spec.label}] ${reason.trim()}`);
     setReason("");
+  };
+
+  // Add sub-task form
+  const [subTitle, setSubTitle] = useState("");
+  const [subTeam, setSubTeam] = useState<TeamId>(oTeam);
+  const subCandidates = PEOPLE.filter((p) => p.team === subTeam);
+  const [subAssignee, setSubAssignee] = useState<string>("");
+  const addSub = () => {
+    if (!subTitle.trim()) return;
+    const sub: Omit<SubTask, "id"> = { title: subTitle.trim(), team: subTeam, assigneeId: subAssignee || undefined, done: false };
+    addSubtask(project.id, sub);
+    setSubTitle(""); setSubAssignee("");
   };
 
   return (
@@ -96,24 +126,12 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
               <Avatar id={project.ownerId} size={38} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{owner?.name}</div>
-                <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>{TEAMS[oTeam].label} · {daysBetween(project.stageEnteredAt)}d in {STAGE_BY_ID[project.stage].label}</div>
+                <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>{TEAMS[oTeam].label} · assigned {relTime(project.stageEnteredAt)} · {daysBetween(project.stageEnteredAt)}d in {STAGE_BY_ID[project.stage].label}</div>
               </div>
             </div>
             {canForward && forward && (
-              <div style={{ marginTop: 11, display: "flex", gap: 7, alignItems: "center" }}>
-                {forwardCandidates.length > 1 && (
-                  <select
-                    className="select" style={{ flex: 1, minWidth: 0 }}
-                    value={forwardToResolved}
-                    onChange={(e) => setForwardTo(e.target.value)}
-                    title={`Who on ${TEAMS[forward.ownerTeam].label} is this for?`}
-                  >
-                    {forwardCandidates.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                )}
-                <button className="btn primary" style={{ flex: "none" }} onClick={() => doTransition(forward, forwardToResolved)}>
-                  {forward.label} <ArrowRight size={14} />
-                </button>
+              <div style={{ marginTop: 11 }}>
+                <TransitionButton spec={forward} me={me} primary onFire={doTransition} />
               </div>
             )}
             {!anyAction && (
@@ -184,14 +202,9 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
                 <input className="input" style={{ marginBottom: 9 }} placeholder="Reason for sending back / rejecting (optional)…" value={reason} onChange={(e) => setReason(e.target.value)} />
               )}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {canBack && backs.map((t) => {
-                  const Icon = kindIcon(t.kind);
-                  return (
-                    <button key={t.to + t.kind} className={`btn sm ${t.kind === "reject" || t.kind === "reopen" ? "danger" : ""}`} onClick={() => doTransition(t)}>
-                      <Icon size={14} /> {t.label}
-                    </button>
-                  );
-                })}
+                {canBack && backs.map((t) => (
+                  <TransitionButton key={t.to + t.kind} spec={t} me={me} danger={t.kind === "reject" || t.kind === "reopen"} onFire={doTransition} />
+                ))}
                 {can("block", me, project) && (
                   <button className="btn sm" onClick={() => setBlock(project.id, !project.blocked, project.blocked ? undefined : "Blocked — reason pending")}>
                     <Ban size={14} /> {project.blocked ? "Clear block" : "Mark blocked"}
@@ -254,21 +267,39 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
           </div>
 
           {/* Sub-tasks */}
-          {project.subtasks.length > 0 && (
-            <div>
-              <div className="section-title">Sub-tasks · {done}/{project.subtasks.length}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                {project.subtasks.map((s) => (
-                  <button key={s.id} disabled={!can("advance", me, project)} onClick={() => toggleSubtask(project.id, s.id)}
-                    style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 9px", borderRadius: 9, textAlign: "left", width: "100%" }}>
-                    {s.done ? <CheckCircle2 size={16} color="var(--pop)" /> : <Circle size={16} color="var(--ink-mute)" />}
-                    <span style={{ fontSize: 13, textDecoration: s.done ? "line-through" : "none", color: s.done ? "var(--ink-mute)" : "var(--ink)", flex: 1 }}>{s.title}</span>
-                    <span className="chip" style={{ fontSize: 10 }}>{TEAMS[s.team].short}</span>
-                  </button>
-                ))}
-              </div>
+          <div>
+            <div className="section-title">Sub-tasks {project.subtasks.length > 0 ? `· ${done}/${project.subtasks.length}` : ""}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              {project.subtasks.map((s) => {
+                const assignee = s.assigneeId ? PEOPLE_BY_ID[s.assigneeId] : undefined;
+                return (
+                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 9px", borderRadius: 9 }}>
+                    <button disabled={!can("advance", me, project)} onClick={() => toggleSubtask(project.id, s.id)}
+                      style={{ display: "flex", alignItems: "center", gap: 9, flex: 1, minWidth: 0, textAlign: "left" }}>
+                      {s.done ? <CheckCircle2 size={16} color="var(--pop)" /> : <Circle size={16} color="var(--ink-mute)" />}
+                      <span style={{ fontSize: 13, textDecoration: s.done ? "line-through" : "none", color: s.done ? "var(--ink-mute)" : "var(--ink)", flex: 1, minWidth: 0 }}>{s.title}</span>
+                    </button>
+                    {s.createdAt && <span style={{ fontSize: 10.5, color: "var(--ink-mute)", flex: "none" }}>{relTime(s.createdAt)}</span>}
+                    {assignee ? <Avatar id={assignee.id} size={20} /> : <span className="chip" style={{ fontSize: 10 }}>{TEAMS[s.team].short}</span>}
+                  </div>
+                );
+              })}
+              {project.subtasks.length === 0 && <div style={{ fontSize: 12.5, color: "var(--ink-mute)" }}>No sub-tasks yet.</div>}
             </div>
-          )}
+            {can("advance", me, project) && (
+              <div style={{ display: "flex", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
+                <input className="input" style={{ flex: 1, minWidth: 140 }} placeholder="New sub-task…" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSub()} />
+                <select className="select" style={{ maxWidth: 130 }} value={subTeam} onChange={(e) => { setSubTeam(e.target.value as TeamId); setSubAssignee(""); }}>
+                  {Object.values(TEAMS).filter((t) => t.id !== "leadership" && t.id !== "partner").map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
+                <select className="select" style={{ maxWidth: 140 }} value={subAssignee} onChange={(e) => setSubAssignee(e.target.value)}>
+                  <option value="">Unassigned</option>
+                  {subCandidates.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <button className="btn sm" onClick={addSub}><Plus size={14} /></button>
+              </div>
+            )}
+          </div>
 
           {/* History */}
           <div>

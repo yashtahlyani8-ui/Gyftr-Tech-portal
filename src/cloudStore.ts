@@ -13,7 +13,7 @@ type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
 const SELECT = "*, subtasks(*), stage_history(*), comments(*), attachments(*)";
 
 function mapSubtask(r: Row): SubTask {
-  return { id: r.id, title: r.title, team: r.team, done: r.done };
+  return { id: r.id, title: r.title, team: r.team, assigneeId: r.assignee_id ?? undefined, done: r.done, createdAt: Date.parse(r.created_at) };
 }
 function mapHistory(r: Row): HistoryEntry {
   return { id: r.id, at: Date.parse(r.at), byId: r.by_id, fromStage: r.from_stage, toStage: r.to_stage, fromStatus: r.from_status, toStatus: r.to_status, note: r.note ?? undefined };
@@ -32,7 +32,7 @@ function mapProject(r: Row): Project {
     blocked: r.blocked, blockReason: r.block_reason ?? undefined,
     stageEnteredAt: Date.parse(r.stage_entered_at), createdAt: Date.parse(r.created_at),
     targetGoLive: r.target_go_live, sacrosanctGoLive: r.sacrosanct_go_live,
-    subtasks: (r.subtasks ?? []).map(mapSubtask),
+    subtasks: (r.subtasks ?? []).map(mapSubtask).sort((a: SubTask, b: SubTask) => (a.createdAt ?? 0) - (b.createdAt ?? 0)),
     history: (r.stage_history ?? []).map(mapHistory).sort((a: HistoryEntry, b: HistoryEntry) => a.at - b.at),
     comments: (r.comments ?? []).map(mapComment).sort((a: Comment, b: Comment) => a.at - b.at),
     attachments: (r.attachments ?? []).map(mapAttachment).sort((a: Attachment, b: Attachment) => a.at - b.at),
@@ -204,7 +204,7 @@ export function toggleSubtask(id: string, subId: string) {
 
 export function addSubtask(id: string, sub: Omit<SubTask, "id">) {
   if (!supabase) return;
-  supabase.from("subtasks").insert({ project_id: id, title: sub.title, team: sub.team, done: sub.done }).then(({ error }) => {
+  supabase.from("subtasks").insert({ project_id: id, title: sub.title, team: sub.team, assignee_id: sub.assigneeId ?? null, done: sub.done }).then(({ error }) => {
     if (error) console.error("Subtask insert failed:", error.message); else fetchAll();
   });
 }
@@ -227,7 +227,7 @@ export async function createProject(
   if (error || !data) throw new Error(error?.message ?? "Create failed");
   const proj = mapProject(data);
   if (input.subtasks?.length) {
-    await supabase.from("subtasks").insert(input.subtasks.map((s) => ({ project_id: proj.id, title: s.title, team: s.team, done: s.done })));
+    await supabase.from("subtasks").insert(input.subtasks.map((s) => ({ project_id: proj.id, title: s.title, team: s.team, assignee_id: s.assigneeId ?? null, done: s.done })));
   }
   await insertHistory(proj.id, input.businessOwnerId, null, input.stage, null, input.status, "Project created");
   await fetchAll();

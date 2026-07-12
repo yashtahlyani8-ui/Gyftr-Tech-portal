@@ -131,10 +131,19 @@ alter table comments      enable row level security;
 alter table attachments   enable row level security;
 
 -- projects: see if involved/overseer; create if business/product/spoc/pmo; update only in-court team or pmo
+--
+-- p_upd's WITH CHECK deliberately checks involved_teams, not "my_team() = the new owner":
+-- a handoff (forward/back/reject) is written by the OUTGOING team, and after
+-- sync_project_scope() recomputes owner_team to the INCOMING team, my_team() = owner_team
+-- would never hold for the very update that performs the handoff. involved_teams only
+-- grows, and the actor's team is already in it (added the moment they became owner), so
+-- this still rejects teams that were never part of the project while allowing every
+-- legitimate transition.
 create policy p_sel on projects for select using ( is_overseer() or my_team() = any(involved_teams) );
 create policy p_ins on projects for insert with check ( is_pmo() or my_team() in ('business','product','tech_spoc') );
-create policy p_upd on projects for update using ( is_pmo() or my_team() = owner_team )
-                                        with check ( is_pmo() or my_team() = stage_owner(stage) );
+create policy p_upd on projects for update
+  using ( is_pmo() or my_team() = owner_team or (stage = 'to_be_picked' and my_team() = 'development') )
+  with check ( is_pmo() or my_team() = any(involved_teams) );
 create policy p_del on projects for delete using ( is_pmo() );
 
 -- children: readable if the project is visible; writable only by in-court team / pmo

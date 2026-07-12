@@ -70,6 +70,14 @@ function ensureStarted() {
     .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, () => fetchAll())
     .on("postgres_changes", { event: "*", schema: "public", table: "attachments" }, () => fetchAll())
     .subscribe();
+
+  // Every profile switch is a real sign-out + sign-in (different auth.uid(), different
+  // RLS-visible rows). Without this, `started` above means fetchAll() never runs again
+  // and the board stays stuck on whatever the previous person could see until a hard reload.
+  client.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") fetchAll();
+    else if (event === "SIGNED_OUT") { state = []; notify(); }
+  });
 }
 
 export function useProjects(): Project[] {

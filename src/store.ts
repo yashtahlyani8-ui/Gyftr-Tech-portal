@@ -45,6 +45,12 @@ export function toggleSubtask(...args: Parameters<typeof local.toggleSubtask>) {
 export function addSubtask(...args: Parameters<typeof local.addSubtask>) {
   return isCloud ? cloud.addSubtask(...args) : local.addSubtask(...args);
 }
+export function removeSubtask(...args: Parameters<typeof local.removeSubtask>) {
+  return isCloud ? cloud.removeSubtask(...args) : local.removeSubtask(...args);
+}
+export function reassignSubtask(...args: Parameters<typeof local.reassignSubtask>) {
+  return isCloud ? cloud.reassignSubtask(...args) : local.reassignSubtask(...args);
+}
 export function createProject(...args: Parameters<typeof local.createProject>): Promise<Project> {
   return isCloud ? cloud.createProject(...args) : Promise.resolve(local.createProject(...args));
 }

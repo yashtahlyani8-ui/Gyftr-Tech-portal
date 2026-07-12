@@ -159,7 +159,15 @@ export function toggleSubtask(id: string, subId: string) {
 }
 
 export function addSubtask(id: string, sub: Omit<SubTask, "id">) {
-  update(id, (p) => ({ ...p, subtasks: [...p.subtasks, { ...sub, id: uid("s") }] }));
+  update(id, (p) => ({ ...p, subtasks: [...p.subtasks, { ...sub, id: uid("s"), createdAt: now() }] }));
+}
+
+export function removeSubtask(id: string, subId: string) {
+  update(id, (p) => ({ ...p, subtasks: p.subtasks.filter((s) => s.id !== subId) }));
+}
+
+export function reassignSubtask(id: string, subId: string, assigneeId: string | undefined) {
+  update(id, (p) => ({ ...p, subtasks: p.subtasks.map((s) => (s.id === subId ? { ...s, assigneeId } : s)) }));
 }
 
 export function createProject(input: Omit<Project, "id" | "code" | "createdAt" | "stageEnteredAt" | "history" | "comments" | "subtasks" | "attachments"> & { subtasks?: SubTask[] }) {

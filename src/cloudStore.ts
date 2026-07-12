@@ -209,6 +209,24 @@ export function addSubtask(id: string, sub: Omit<SubTask, "id">) {
   });
 }
 
+export function removeSubtask(id: string, subId: string) {
+  const p = findProject(id); if (!p) return;
+  localPatch(id, { subtasks: p.subtasks.filter((s) => s.id !== subId) });
+  if (!supabase) return;
+  supabase.from("subtasks").delete().eq("id", subId).then(({ error }) => {
+    if (error) console.error("Subtask delete failed:", error.message);
+  });
+}
+
+export function reassignSubtask(id: string, subId: string, assigneeId: string | undefined) {
+  const p = findProject(id); if (!p) return;
+  localPatch(id, { subtasks: p.subtasks.map((s) => (s.id === subId ? { ...s, assigneeId } : s)) });
+  if (!supabase) return;
+  supabase.from("subtasks").update({ assignee_id: assigneeId ?? null }).eq("id", subId).then(({ error }) => {
+    if (error) console.error("Subtask reassign failed:", error.message);
+  });
+}
+
 export async function createProject(
   input: Omit<Project, "id" | "code" | "createdAt" | "stageEnteredAt" | "history" | "comments" | "subtasks" | "attachments"> & { subtasks?: SubTask[] }
 ): Promise<Project> {

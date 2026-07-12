@@ -136,30 +136,35 @@ export default function App() {
       </aside>
 
       <main className="main">
-        <div className="topbar">
-          <div>
-            <div className="crumb">Gyftr Tech Portal · {TEAMS[me.team].label}</div>
-            <h1>{active === "team" ? `My Team · ${TEAMS[me.team].label}` : m.h}</h1>
-            <div className="sub">{m.s}</div>
-          </div>
-          <div className="spacer" />
-          {isReadOnly(me) && <span className="chip"><Eye size={12} /> Read-only observer</span>}
-          {can("create", me) && <button className="btn primary" onClick={() => setCreating(true)}><Plus size={15} /> New project</button>}
-        </div>
+        {open ? (
+          <Drawer project={open} me={me} onClose={() => setOpenId(null)} />
+        ) : (
+          <>
+            <div className="topbar">
+              <div>
+                <div className="crumb">Gyftr Tech Portal · {TEAMS[me.team].label}</div>
+                <h1>{active === "team" ? `My Team · ${TEAMS[me.team].label}` : m.h}</h1>
+                <div className="sub">{m.s}</div>
+              </div>
+              <div className="spacer" />
+              {isReadOnly(me) && <span className="chip"><Eye size={12} /> Read-only observer</span>}
+              {can("create", me) && <button className="btn primary" onClick={() => setCreating(true)}><Plus size={15} /> New project</button>}
+            </div>
 
-        {showFilters && <FilterBar filters={filters} setFilters={setFilters} lobs={lobs} />}
+            {showFilters && <FilterBar filters={filters} setFilters={setFilters} lobs={lobs} />}
 
-        <div className="content">
-          {active === "queue" && <MyQueue projects={projects} me={me} onOpen={setOpenId} />}
-          {active === "team" && <Board projects={filtered} me={me} onOpen={setOpenId} />}
-          {active === "overview" && <Dashboard projects={projects} onOpen={setOpenId} />}
-          {active === "board" && <Board projects={filtered} me={me} onOpen={setOpenId} />}
-          {active === "list" && <TableView projects={filtered} onOpen={setOpenId} />}
-          {active === "escalations" && <Escalations projects={projects} onOpen={setOpenId} />}
-        </div>
+            <div className="content">
+              {active === "queue" && <MyQueue projects={projects} me={me} onOpen={setOpenId} />}
+              {active === "team" && <Board projects={filtered} me={me} onOpen={setOpenId} />}
+              {active === "overview" && <Dashboard projects={projects} onOpen={setOpenId} />}
+              {active === "board" && <Board projects={filtered} me={me} onOpen={setOpenId} />}
+              {active === "list" && <TableView projects={filtered} onOpen={setOpenId} />}
+              {active === "escalations" && <Escalations projects={projects} onOpen={setOpenId} />}
+            </div>
+          </>
+        )}
       </main>
 
-      {open && <Drawer project={open} me={me} onClose={() => setOpenId(null)} />}
       {creating && <CreateModal meId={me.id} onClose={(id) => { setCreating(false); if (id) setOpenId(id); }} />}
     </div>
   );

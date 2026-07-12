@@ -22,13 +22,19 @@ export function isMine(me: Person, proj: Project): boolean {
   return proj.ownerId === me.id || ownerTeam(proj) === me.team;
 }
 
-/** Every team that has been (or is) part of a project's journey. Monotonic:
- *  a project at stage N has passed through every stage 0..N. */
+/** Every team that has been (or is) part of a project's journey. Keyed off the
+ *  FURTHEST stage ever reached (per history), not just the current one — a live
+ *  project reopened back to Dev must stay visible to QA/UAT teams who tested it.
+ *  Mirrors the DB's involved_teams (backfill + triggers in schema.sql). */
 export function teamsInvolved(proj: Project): Set<TeamId> {
-  const idx = STAGE_ORDER.indexOf(proj.stage);
-  const teams = new Set<TeamId>(STAGES.slice(0, idx + 1).map((s) => s.owner));
+  let maxIdx = STAGE_ORDER.indexOf(proj.stage);
+  for (const h of proj.history) {
+    maxIdx = Math.max(maxIdx, STAGE_ORDER.indexOf(h.toStage));
+    if (h.fromStage) maxIdx = Math.max(maxIdx, STAGE_ORDER.indexOf(h.fromStage));
+  }
+  const teams = new Set<TeamId>(STAGES.slice(0, maxIdx + 1).map((s) => s.owner));
   proj.subtasks.forEach((st) => teams.add(st.team));
-  if (idx >= STAGE_ORDER.indexOf("development")) teams.add("design");
+  if (maxIdx >= STAGE_ORDER.indexOf("development")) teams.add("design");
   return teams;
 }
 

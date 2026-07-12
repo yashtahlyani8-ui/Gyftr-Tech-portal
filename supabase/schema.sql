@@ -96,6 +96,21 @@ create table subtasks (
   title text not null, team team_id not null, assignee_id uuid references people(id),
   done boolean not null default false, created_at timestamptz not null default now()
 );
+
+-- Assigning a sub-task to a team makes the project visible to that team
+-- (e.g. a Design sub-task on a Dev-stage project lets Design see it at all).
+-- SECURITY DEFINER so the scope-sync write itself never trips projects RLS.
+create or replace function sync_subtask_scope() returns trigger language plpgsql security definer as $$
+begin
+  update projects
+     set involved_teams = (select array(select distinct unnest(involved_teams || new.team)))
+   where id = new.project_id and not (new.team = any(involved_teams));
+  return new;
+end;
+$$;
+create trigger trg_subtask_scope after insert or update of team on subtasks
+  for each row execute function sync_subtask_scope();
+
 create table stage_history (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade,

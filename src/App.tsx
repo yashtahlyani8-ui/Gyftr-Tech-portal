@@ -77,6 +77,7 @@ export default function App() {
   }, [me?.id]);
 
   const lobs = useMemo(() => [...new Set(projects.map((p) => p.lob))].sort(), [projects]);
+  const partners = useMemo(() => [...new Set(projects.map((p) => p.partner))].sort(), [projects]);
   const myCount = useMemo(() => (me ? projects.filter((p) => isMine(me, p)).length : 0), [projects, me]);
   const escCount = useMemo(() => projects.filter((p) =>
     p.stage !== "live" && (openLeadershipNote(p) || p.blocked || overdueInfo(p.sacrosanctGoLive, p.targetGoLive, false).overdue ||
@@ -173,7 +174,7 @@ export default function App() {
               {can("create", me) && <button className="btn primary" onClick={() => setCreating(true)}><Plus size={15} /> New project</button>}
             </div>
 
-            {showFilters && <FilterBar filters={filters} setFilters={setFilters} lobs={lobs} />}
+            {showFilters && <FilterBar filters={filters} setFilters={setFilters} lobs={lobs} partners={partners} />}
 
             <div className="content">
               {active === "queue" && <MyQueue projects={projects} me={me} onOpen={setOpenId} />}

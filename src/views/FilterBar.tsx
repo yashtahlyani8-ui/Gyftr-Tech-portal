@@ -5,14 +5,14 @@ import { overdueInfo } from "../lib";
 import { PEOPLE } from "../people";
 
 export interface Filters {
-  q: string; lob: string; priority: string; status: string; owner: string;
+  q: string; lob: string; partner: string; priority: string; status: string; owner: string;
   blocked: boolean; overdue: boolean;
 }
 
-export const EMPTY_FILTERS: Filters = { q: "", lob: "all", priority: "all", status: "all", owner: "all", blocked: false, overdue: false };
+export const EMPTY_FILTERS: Filters = { q: "", lob: "all", partner: "all", priority: "all", status: "all", owner: "all", blocked: false, overdue: false };
 
 export function isFiltering(f: Filters): boolean {
-  return f.q !== "" || f.lob !== "all" || f.priority !== "all" || f.status !== "all" || f.owner !== "all" || f.blocked || f.overdue;
+  return f.q !== "" || f.lob !== "all" || f.partner !== "all" || f.priority !== "all" || f.status !== "all" || f.owner !== "all" || f.blocked || f.overdue;
 }
 
 export function applyFilters(projects: Project[], f: Filters): Project[] {
@@ -20,6 +20,7 @@ export function applyFilters(projects: Project[], f: Filters): Project[] {
   return projects.filter((p) => {
     if (q && !`${p.code} ${p.title} ${p.partner} ${p.lob}`.toLowerCase().includes(q)) return false;
     if (f.lob !== "all" && p.lob !== f.lob) return false;
+    if (f.partner !== "all" && p.partner !== f.partner) return false;
     if (f.priority !== "all" && p.priority !== f.priority) return false;
     if (f.status !== "all" && p.status !== f.status) return false;
     if (f.owner !== "all" && p.ownerId !== f.owner) return false;
@@ -29,7 +30,9 @@ export function applyFilters(projects: Project[], f: Filters): Project[] {
   });
 }
 
-export function FilterBar({ filters, setFilters, lobs }: { filters: Filters; setFilters: (f: Filters) => void; lobs: string[] }) {
+export function FilterBar({ filters, setFilters, lobs, partners }: {
+  filters: Filters; setFilters: (f: Filters) => void; lobs: string[]; partners: string[];
+}) {
   const set = (patch: Partial<Filters>) => setFilters({ ...filters, ...patch });
   return (
     <div className="filterbar">
@@ -37,6 +40,10 @@ export function FilterBar({ filters, setFilters, lobs }: { filters: Filters; set
         <Search size={15} color="var(--ink-mute)" />
         <input value={filters.q} onChange={(e) => set({ q: e.target.value })} placeholder="Search projects, partners, LOB…" />
       </div>
+      <select className="fsel" value={filters.partner} onChange={(e) => set({ partner: e.target.value })}>
+        <option value="all">All Partners</option>
+        {partners.map((p) => <option key={p} value={p}>{p}</option>)}
+      </select>
       <select className="fsel" value={filters.lob} onChange={(e) => set({ lob: e.target.value })}>
         <option value="all">All LOBs</option>
         {lobs.map((l) => <option key={l} value={l}>{l}</option>)}

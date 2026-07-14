@@ -118,6 +118,7 @@ function SubtaskRow({ s, project, me }: { s: SubTask; project: Project; me: Pers
 export function Drawer({ project, me, onClose }: { project: Project; me: Person; onClose: () => void }) {
   const [comment, setComment] = useState("");
   const [reason, setReason] = useState("");
+  const [reasonError, setReasonError] = useState(false);
   const [attachName, setAttachName] = useState("");
   const [attachUrl, setAttachUrl] = useState("");
   const [attachKind, setAttachKind] = useState<DocKind>("Link");
@@ -154,9 +155,16 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
   const availableForwards = forwards.filter((f) => canPerformTransition(me, project, f));
   const canBack = can("advance", me, project);
   const canEdit = can("status", me, project);
+  // Product leads can edit dates on any project, not just those in their court.
+  const canEditDates = canEdit || (me.team === "product" && me.role === "lead");
   const anyAction = availableForwards.length > 0 || canBack || canEdit;
 
   const doTransition = (spec: TransitionSpec, ownerId: string) => {
+    if (spec.to === "scoping" && !reason.trim()) {
+      setReasonError(true);
+      return;
+    }
+    setReasonError(false);
     transition(project.id, me.id, spec, ownerId);
     if (reason.trim() && spec.kind !== "forward") addComment(project.id, me.id, `[${spec.label}] ${reason.trim()}`);
     setReason("");
@@ -276,7 +284,16 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
                 </div>
               )}
               {canBack && backs.length > 0 && (
-                <input className="input" style={{ marginBottom: 9 }} placeholder="Reason for sending back / rejecting (optional)…" value={reason} onChange={(e) => setReason(e.target.value)} />
+                <div style={{ marginBottom: 9 }}>
+                  <input
+                    className="input"
+                    style={{ borderColor: reasonError ? "var(--rose-fg)" : undefined }}
+                    placeholder="Reason for sending back / rejecting (required when returning to Product)…"
+                    value={reason}
+                    onChange={(e) => { setReason(e.target.value); if (e.target.value.trim()) setReasonError(false); }}
+                  />
+                  {reasonError && <div style={{ fontSize: 11.5, color: "var(--rose-fg)", marginTop: 4 }}>A reason is required when returning to Product.</div>}
+                </div>
               )}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {canBack && backs.map((t) => (
@@ -387,31 +404,25 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
             <div className="section-title">Details</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 9, fontSize: 12.5 }}>
               <DetailRow label="Raised by"><b style={{ color: "var(--ink-soft)" }}>{PEOPLE_BY_ID[project.businessOwnerId]?.name}</b></DetailRow>
-              <DetailRow label="Priority month">
-                {canEdit
-                  ? <input className="input" style={{ maxWidth: 110, padding: "4px 8px", fontSize: 12, textAlign: "right" }} defaultValue={project.priorityMonth ?? ""} placeholder="Aug'26"
-                      onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== project.priorityMonth) updateDetails(project.id, { priorityMonth: v }); }} />
-                  : <b style={{ color: "var(--ink-soft)" }}>{project.priorityMonth ?? "—"}</b>}
-              </DetailRow>
-              <DetailRow label="Target go-live">
-                {canEdit
+              <DetailRow label="Expected go-live">
+                {canEditDates
                   ? <input className="input mono" type="date" style={{ maxWidth: 140, padding: "4px 8px", fontSize: 12 }} value={project.targetGoLive ?? ""}
                       onChange={(e) => updateDetails(project.id, { targetGoLive: e.target.value || null })} />
                   : <b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.targetGoLive)}</b>}
               </DetailRow>
-              <DetailRow label="Timeline ETA">
-                {canEdit
-                  ? <input className="input mono" type="date" style={{ maxWidth: 140, padding: "4px 8px", fontSize: 12 }} value={project.timelineEta ?? ""}
-                      onChange={(e) => updateDetails(project.id, { timelineEta: e.target.value || null })} />
-                  : <b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.timelineEta)}</b>}
-              </DetailRow>
-              <DetailRow label="Sacrosanct">
+              <DetailRow label="Promised go-live">
                 {me.role === "pmo"
                   ? <input className="input mono" type="date" style={{ maxWidth: 140, padding: "4px 8px", fontSize: 12 }} value={project.sacrosanctGoLive ?? ""}
                       onChange={(e) => updateDetails(project.id, { sacrosanctGoLive: e.target.value || null })} />
                   : <b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.sacrosanctGoLive)}</b>}
               </DetailRow>
-              <DetailRow label="Final go-live"><b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.finalGoLive)}</b></DetailRow>
+              <DetailRow label="Timeline ETA">
+                {canEditDates
+                  ? <input className="input mono" type="date" style={{ maxWidth: 140, padding: "4px 8px", fontSize: 12 }} value={project.timelineEta ?? ""}
+                      onChange={(e) => updateDetails(project.id, { timelineEta: e.target.value || null })} />
+                  : <b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.timelineEta)}</b>}
+              </DetailRow>
+              <DetailRow label="Go Live Date"><b className="mono" style={{ color: "var(--ink-soft)" }}>{fmtDate(project.finalGoLive)}</b></DetailRow>
               <DetailRow label="Dev effort">
                 {canEdit
                   ? <input className="input mono" type="number" min="0" style={{ maxWidth: 80, padding: "4px 8px", fontSize: 12, textAlign: "right" }} defaultValue={project.devEffortDays ?? ""}

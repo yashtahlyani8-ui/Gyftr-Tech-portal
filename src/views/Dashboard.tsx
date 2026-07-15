@@ -3,12 +3,13 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, LabelList,
   PieChart, Pie, CartesianGrid,
 } from "recharts";
-import { AlertTriangle, Flame, Rocket, Ban, AlertOctagon } from "lucide-react";
-import type { Project } from "../types";
+import { AlertTriangle, Flame, Rocket, Ban, AlertOctagon, CheckCircle2, Clock, ListTodo } from "lucide-react";
+import type { Person, Project } from "../types";
 import { STAGES, STAGE_BY_ID, TEAMS, aging } from "../workflow";
 import { daysBetween, fmtDate, overdueInfo } from "../lib";
 import { PEOPLE_BY_ID } from "../people";
-import { Avatar, StatusPill, AgingChip, OverdueTag } from "../ui";
+import { isMine, isOverseer } from "../roles";
+import { Avatar, StatusPill, AgingChip, OverdueTag, PriorityChip } from "../ui";
 
 /* Gyftr-tuned categorical (green-led, muted, professional) */
 const CAT = ["#62A92A", "#35618E", "#C79A3E", "#1C7A64", "#8A6FB0", "#B23A32"];
@@ -44,7 +45,121 @@ function Kpi({ lbl, num, Icon, color }: { lbl: string; num: number; Icon: typeof
 
 const tip = { borderRadius: 12, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 12, boxShadow: "var(--sh-md)", color: "var(--ink)" };
 
-export function Dashboard({ projects, onOpen }: { projects: Project[]; onOpen: (id: string) => void }) {
+/** Personal dashboard for non-overseers: my court, my subtasks, overdue, blocked. */
+function PersonalDashboard({ projects, me, onOpen }: { projects: Project[]; me: Person; onOpen: (id: string) => void }) {
+  const stats = useMemo(() => {
+    const inCourt = projects.filter((p) => isMine(me, p));
+    const mySubtasks = projects.flatMap((p) =>
+      p.subtasks.filter((s) => s.assigneeId === me.id).map((s) => ({ sub: s, proj: p }))
+    );
+    const pendingSubs = mySubtasks.filter((x) => !x.sub.done);
+    const blockedProjects = inCourt.filter((p) => p.blocked);
+    const overdueProjects = inCourt.filter((p) => overdueInfo(p.sacrosanctGoLive, p.targetGoLive, false).overdue);
+    return { inCourt, mySubtasks, pendingSubs, blockedProjects, overdueProjects };
+  }, [projects, me]);
+
+  const courtCount = useCountUp(stats.inCourt.length);
+  const subCount = useCountUp(stats.pendingSubs.length);
+  const overdueCount = useCountUp(stats.overdueProjects.length);
+  const blockedCount = useCountUp(stats.blockedProjects.length);
+
+  return (
+    <div className="grid stagger" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      {/* KPIs */}
+      <div className="panel kpi">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+          <span className="lbl">In My Court</span>
+          <div className="kpi-icon" style={{ background: "color-mix(in srgb, var(--pop-deep) 14%, transparent)", color: "var(--pop-deep)" }}><Rocket size={17} /></div>
+        </div>
+        <span className="num" style={{ color: "var(--pop-deep)" }}>{courtCount}</span>
+      </div>
+      <div className="panel kpi">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+          <span className="lbl">Pending Subtasks</span>
+          <div className="kpi-icon" style={{ background: "color-mix(in srgb, var(--blue-fg) 14%, transparent)", color: "var(--blue-fg)" }}><ListTodo size={17} /></div>
+        </div>
+        <span className="num" style={{ color: "var(--blue-fg)" }}>{subCount}</span>
+      </div>
+      <div className="panel kpi">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+          <span className="lbl">Overdue</span>
+          <div className="kpi-icon" style={{ background: "color-mix(in srgb, var(--amber-fg) 14%, transparent)", color: "var(--amber-fg)" }}><Clock size={17} /></div>
+        </div>
+        <span className="num" style={{ color: "var(--amber-fg)" }}>{overdueCount}</span>
+      </div>
+      <div className="panel kpi">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+          <span className="lbl">Blocked</span>
+          <div className="kpi-icon" style={{ background: "color-mix(in srgb, var(--rose-fg) 14%, transparent)", color: "var(--rose-fg)" }}><Ban size={17} /></div>
+        </div>
+        <span className="num" style={{ color: "var(--rose-fg)" }}>{blockedCount}</span>
+      </div>
+
+      {/* Projects in my court */}
+      <div className="panel" style={{ gridColumn: "span 4" }}>
+        <h3>Projects in my court</h3>
+        <div className="hint">These need your action — your team currently holds the ball.</div>
+        {stats.inCourt.length === 0 ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 0", color: "var(--ink-mute)", fontSize: 13 }}>
+            <CheckCircle2 size={20} color="var(--pop)" /> You're clear — nothing in your court right now.
+          </div>
+        ) : (
+          <div className="tablewrap" style={{ boxShadow: "none" }}>
+            <table className="table">
+              <thead><tr><th>Project</th><th>Partner</th><th>Stage</th><th>Status</th><th>Promised Date</th><th>Age</th></tr></thead>
+              <tbody>
+                {stats.inCourt.map((p) => (
+                  <tr key={p.id} onClick={() => onOpen(p.id)}>
+                    <td><span className="mono" style={{ color: "var(--ink-mute)", fontWeight: 600, marginRight: 8, fontSize: 11 }}>{p.code}</span><PriorityChip p={p.priority} />{" "}{p.title}</td>
+                    <td><span className="chip">{p.partner}</span></td>
+                    <td>{STAGE_BY_ID[p.stage].label}</td>
+                    <td><StatusPill status={p.status} /></td>
+                    <td><span className="mono" style={{ fontSize: 12 }}>{fmtDate(p.sacrosanctGoLive)}</span><OverdueTag project={p} /></td>
+                    <td><AgingChip project={p} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* My subtasks */}
+      <div className="panel" style={{ gridColumn: "span 4" }}>
+        <h3>My subtasks</h3>
+        <div className="hint">Subtasks assigned to you across all projects.</div>
+        {stats.mySubtasks.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--ink-mute)", padding: "12px 0" }}>No subtasks assigned to you yet.</div>
+        ) : (
+          <div className="tablewrap" style={{ boxShadow: "none" }}>
+            <table className="table">
+              <thead><tr><th>Subtask</th><th>Project</th><th>Expected</th><th>Promised</th><th>Effort</th><th>Status</th></tr></thead>
+              <tbody>
+                {stats.mySubtasks.map(({ sub, proj }) => (
+                  <tr key={sub.id} onClick={() => onOpen(proj.id)} style={{ opacity: sub.done ? 0.5 : 1 }}>
+                    <td style={{ textDecoration: sub.done ? "line-through" : "none" }}>{sub.title}</td>
+                    <td><span className="mono" style={{ fontSize: 11, color: "var(--ink-mute)", marginRight: 6 }}>{proj.code}</span>{proj.title}</td>
+                    <td><span className="mono" style={{ fontSize: 12 }}>{fmtDate(sub.expectedDate ?? null)}</span></td>
+                    <td><span className="mono" style={{ fontSize: 12 }}>{fmtDate(sub.promisedDate ?? null)}</span></td>
+                    <td>{sub.effortDays != null ? <span className="chip">{sub.effortDays}d</span> : "—"}</td>
+                    <td>{sub.done ? <span className="chip" style={{ background: "var(--pop-soft)", color: "var(--pop-deep)" }}>Done</span> : <span className="chip">Pending</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function Dashboard({ projects, me, onOpen }: { projects: Project[]; me: Person; onOpen: (id: string) => void }) {
+  if (!isOverseer(me)) return <PersonalDashboard projects={projects} me={me} onOpen={onOpen} />;
+  return <OrgDashboard projects={projects} onOpen={onOpen} />;
+}
+
+function OrgDashboard({ projects, onOpen }: { projects: Project[]; onOpen: (id: string) => void }) {
   const stats = useMemo(() => {
     const active = projects.filter((p) => p.stage !== "live");
     const live = projects.filter((p) => p.stage === "live");

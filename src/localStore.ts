@@ -180,6 +180,12 @@ export function reassignSubtask(id: string, subId: string, assigneeId: string | 
   update(id, (p) => ({ ...p, subtasks: p.subtasks.map((s) => (s.id === subId ? { ...s, assigneeId } : s)) }));
 }
 
+export type SubtaskPatch = Partial<Pick<import("./types").SubTask, "promisedDate" | "effortDays" | "expectedDate">>;
+
+export function updateSubtask(id: string, subId: string, patch: SubtaskPatch) {
+  update(id, (p) => ({ ...p, subtasks: p.subtasks.map((s) => (s.id === subId ? { ...s, ...patch } : s)) }));
+}
+
 export function createProject(input: Omit<Project, "id" | "code" | "createdAt" | "stageEnteredAt" | "finalGoLive" | "history" | "comments" | "subtasks" | "attachments"> & { subtasks?: SubTask[] }) {
   const n = state.length + 1;
   const code = `TP-${String(n).padStart(3, "0")}`;

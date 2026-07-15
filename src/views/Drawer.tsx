@@ -10,7 +10,7 @@ import {
 } from "../workflow";
 import {
   transition, setStatus, setBlock, addComment, toggleSubtask, addSubtask, removeSubtask, reassignSubtask,
-  reassign, addAttachment, resolveNote, updateDetails,
+  reassign, addAttachment, resolveNote, updateDetails, updateSubtask,
 } from "../store";
 
 /** One label/value row in the Details rail. */
@@ -25,6 +25,7 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 import { can, canPerformTransition, isOverseer, ownerTeam, ownerForTransition } from "../roles";
 import { PEOPLE, PEOPLE_BY_ID } from "../people";
 import { daysBetween, relTime, fmtDate } from "../lib";
+import type { SubtaskPatch } from "../cloudStore";
 import { Avatar, StatusPill, PriorityChip, AgingChip, OverdueTag } from "../ui";
 
 const DOC_KINDS: DocKind[] = ["BRD", "PRD", "Figma", "HTML", "Doc"];
@@ -64,7 +65,14 @@ function ForwardPicker({ forwards, me, onFire }: { forwards: TransitionSpec[]; m
   const defaultId = ownerForTransition(forwards[0], me);
   const [selectedId, setSelectedId] = useState(() => (options.some((o) => o.person.id === defaultId) ? defaultId : options[0]?.person.id ?? ""));
   const selected = options.find((o) => o.person.id === selectedId) ?? options[0];
-  if (!selected) return null;
+  if (!selected) {
+    const teams = [...new Set(forwards.map((f) => f.ownerTeam))].join(", ");
+    return (
+      <div style={{ fontSize: 12, color: "var(--amber-fg)", padding: "8px 0" }}>
+        No team members found for the receiving team ({teams}). Ask your admin to add people to that team in the directory.
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
       {options.length > 1 && (
@@ -79,37 +87,87 @@ function ForwardPicker({ forwards, me, onFire }: { forwards: TransitionSpec[]; m
   );
 }
 
-/** One sub-task row: toggle done, reassign to anyone (not just its own team), remove. */
+/** One sub-task row: toggle done, reassign, edit dates/effort. */
 function SubtaskRow({ s, project, me }: { s: SubTask; project: Project; me: Person }) {
   const [reassigning, setReassigning] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const assignee = s.assigneeId ? PEOPLE_BY_ID[s.assigneeId] : undefined;
   const editable = can("advance", me, project);
+  // Assignee can fill in their own promised date + effort; assigner can set expected date
+  const isAssignee = s.assigneeId === me.id;
+  const canEditExpected = editable; // assigner (team in court)
+  const canEditPromised = isAssignee || me.role === "pmo"; // assignee or PMO
+
+  function patch(p: SubtaskPatch) { updateSubtask(project.id, s.id, p); }
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 9px", borderRadius: 9 }}>
-      <button disabled={!editable} onClick={() => toggleSubtask(project.id, s.id)}
-        style={{ display: "flex", alignItems: "center", gap: 9, flex: 1, minWidth: 0, textAlign: "left" }}>
-        {s.done ? <CheckCircle2 size={16} color="var(--pop)" /> : <Circle size={16} color="var(--ink-mute)" />}
-        <span style={{ fontSize: 13, textDecoration: s.done ? "line-through" : "none", color: s.done ? "var(--ink-mute)" : "var(--ink)", flex: 1, minWidth: 0 }}>{s.title}</span>
-      </button>
-      {s.createdAt && <span style={{ fontSize: 10.5, color: "var(--ink-mute)", flex: "none" }}>{relTime(s.createdAt)}</span>}
-      {reassigning ? (
-        <select
-          className="select sm" autoFocus style={{ maxWidth: 130 }} value={s.assigneeId ?? ""}
-          onChange={(e) => { reassignSubtask(project.id, s.id, e.target.value || undefined); setReassigning(false); }}
-          onBlur={() => setReassigning(false)}
-        >
-          <option value="">Unassigned</option>
-          {PEOPLE.filter((p) => p.role !== "leadership").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      ) : (
-        <button disabled={!editable} onClick={() => setReassigning(true)} title={assignee ? assignee.name : "Unassigned — click to assign"} style={{ display: "flex", flex: "none" }}>
-          {assignee ? <Avatar id={assignee.id} size={20} /> : <span className="chip" style={{ fontSize: 10 }}>{TEAMS[s.team].short}</span>}
+    <div style={{ borderRadius: 9, border: expanded ? "1px solid var(--line)" : "none" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 9px" }}>
+        <button disabled={!editable} onClick={() => toggleSubtask(project.id, s.id)}
+          style={{ display: "flex", alignItems: "center", gap: 9, flex: 1, minWidth: 0, textAlign: "left" }}>
+          {s.done ? <CheckCircle2 size={16} color="var(--pop)" /> : <Circle size={16} color="var(--ink-mute)" />}
+          <span style={{ fontSize: 13, textDecoration: s.done ? "line-through" : "none", color: s.done ? "var(--ink-mute)" : "var(--ink)", flex: 1, minWidth: 0 }}>{s.title}</span>
         </button>
-      )}
-      {editable && (
-        <button className="icon-btn" style={{ width: 24, height: 24, flex: "none" }} title="Remove sub-task" onClick={() => removeSubtask(project.id, s.id)}>
-          <X size={12} />
+        {/* Date/effort summary chips */}
+        {s.expectedDate && <span className="chip mono" style={{ fontSize: 10, flex: "none" }} title="Expected date">Exp {fmtDate(s.expectedDate)}</span>}
+        {s.promisedDate && <span className="chip mono" style={{ fontSize: 10, flex: "none", background: "var(--pop-soft)", color: "var(--pop-deep)" }} title="Promised date">Prom {fmtDate(s.promisedDate)}</span>}
+        {s.effortDays != null && <span className="chip mono" style={{ fontSize: 10, flex: "none" }}>{s.effortDays}d</span>}
+        {/* Expand toggle */}
+        <button className="icon-btn" style={{ width: 22, height: 22, flex: "none", fontSize: 10 }} title="Edit dates & effort" onClick={() => setExpanded((x) => !x)}>
+          {expanded ? "▲" : "▼"}
         </button>
+        {reassigning ? (
+          <select
+            className="select sm" autoFocus style={{ maxWidth: 130 }} value={s.assigneeId ?? ""}
+            onChange={(e) => { reassignSubtask(project.id, s.id, e.target.value || undefined); setReassigning(false); }}
+            onBlur={() => setReassigning(false)}
+          >
+            <option value="">Unassigned</option>
+            {PEOPLE.filter((p) => p.role !== "leadership").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        ) : (
+          <button disabled={!editable} onClick={() => setReassigning(true)} title={assignee ? assignee.name : "Unassigned — click to assign"} style={{ display: "flex", flex: "none" }}>
+            {assignee ? <Avatar id={assignee.id} size={20} /> : <span className="chip" style={{ fontSize: 10 }}>{TEAMS[s.team].short}</span>}
+          </button>
+        )}
+        {editable && (
+          <button className="icon-btn" style={{ width: 24, height: 24, flex: "none" }} title="Remove sub-task" onClick={() => removeSubtask(project.id, s.id)}>
+            <X size={12} />
+          </button>
+        )}
+      </div>
+
+      {/* Expanded date/effort editor */}
+      {expanded && (
+        <div style={{ display: "flex", gap: 12, padding: "8px 9px 10px", borderTop: "1px solid var(--line)", flexWrap: "wrap" }}>
+          <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 120 }}>
+            <label style={{ fontSize: 10.5, color: "var(--ink-mute)", fontWeight: 700 }}>Expected date <span style={{ fontWeight: 400 }}>(assigner)</span></label>
+            <input
+              type="date" className="input mono" style={{ padding: "3px 7px", fontSize: 12 }}
+              value={s.expectedDate ?? ""}
+              disabled={!canEditExpected}
+              onChange={(e) => patch({ expectedDate: e.target.value || undefined })}
+            />
+          </div>
+          <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 120 }}>
+            <label style={{ fontSize: 10.5, color: "var(--ink-mute)", fontWeight: 700 }}>Promised date <span style={{ fontWeight: 400 }}>(assignee)</span></label>
+            <input
+              type="date" className="input mono" style={{ padding: "3px 7px", fontSize: 12 }}
+              value={s.promisedDate ?? ""}
+              disabled={!canEditPromised}
+              onChange={(e) => patch({ promisedDate: e.target.value || undefined })}
+            />
+          </div>
+          <div className="field" style={{ marginBottom: 0, flex: "none", minWidth: 80 }}>
+            <label style={{ fontSize: 10.5, color: "var(--ink-mute)", fontWeight: 700 }}>Effort (days) <span style={{ fontWeight: 400 }}>(assignee)</span></label>
+            <input
+              type="number" min="0" className="input mono" style={{ padding: "3px 7px", fontSize: 12, textAlign: "right", width: 80 }}
+              defaultValue={s.effortDays ?? ""}
+              disabled={!canEditPromised}
+              onBlur={(e) => { const v = e.target.value === "" ? undefined : Number(e.target.value); if (v !== s.effortDays) patch({ effortDays: v }); }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -175,11 +233,15 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
   const [subTeam, setSubTeam] = useState<TeamId>(oTeam);
   const subCandidates = PEOPLE.filter((p) => p.team === subTeam);
   const [subAssignee, setSubAssignee] = useState<string>("");
+  const [subExpectedDate, setSubExpectedDate] = useState<string>("");
   const addSub = () => {
     if (!subTitle.trim()) return;
-    const sub: Omit<SubTask, "id"> = { title: subTitle.trim(), team: subTeam, assigneeId: subAssignee || undefined, done: false };
+    const sub: Omit<SubTask, "id"> = {
+      title: subTitle.trim(), team: subTeam, assigneeId: subAssignee || undefined, done: false,
+      expectedDate: subExpectedDate || undefined,
+    };
     addSubtask(project.id, sub);
-    setSubTitle(""); setSubAssignee("");
+    setSubTitle(""); setSubAssignee(""); setSubExpectedDate("");
   };
 
   return (
@@ -346,6 +408,7 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
                   <option value="">Unassigned</option>
                   {subCandidates.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
+                <input className="input mono" type="date" style={{ maxWidth: 140 }} title="Expected date (set by you, the assigner)" value={subExpectedDate} onChange={(e) => setSubExpectedDate(e.target.value)} />
                 <button className="btn sm" onClick={addSub}><Plus size={14} /></button>
               </div>
             )}

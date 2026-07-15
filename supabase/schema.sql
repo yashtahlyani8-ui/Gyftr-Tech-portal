@@ -230,3 +230,20 @@ $$;
 -- Phase 2 hook: a scheduled Edge Function scans stage_entered_at vs an SLA table and
 -- emails/Slacks the current owner + PMO on breach; a trigger on `comments`
 -- where pinned = true notifies the owning team of a leadership priority note.
+
+-- ══════════════════════════════════════════════════════════════
+-- Migration: subtask date + effort fields (run once on existing DBs)
+-- ══════════════════════════════════════════════════════════════
+-- alter table subtasks add column if not exists expected_date date;
+-- alter table subtasks add column if not exists promised_date date;
+-- alter table subtasks add column if not exists effort_days int;
+
+-- Migration: role_id enum — add 'manager' if you want a distinct manager tier
+-- (currently managers use 'lead' + team='tech_spoc'; this is optional)
+-- alter type role_id add value if not exists 'manager';
+
+-- Migration: RLS update for subtasks — allow assignees to update their own subtask dates/effort
+-- drop policy if exists s_wr on subtasks;
+-- create policy s_wr on subtasks for all
+--   using (can_act(project_id) or assignee_id = (select id from people where auth_id = auth.uid()))
+--   with check (can_act(project_id) or assignee_id = (select id from people where auth_id = auth.uid()));

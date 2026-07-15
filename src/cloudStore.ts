@@ -22,7 +22,13 @@ type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
 const SELECT = "*, subtasks(*), stage_history(*), comments(*), attachments(*)";
 
 function mapSubtask(r: Row): SubTask {
-  return { id: r.id, title: r.title, team: r.team, assigneeId: r.assignee_id ?? undefined, done: r.done, createdAt: Date.parse(r.created_at) };
+  return {
+    id: r.id, title: r.title, team: r.team, assigneeId: r.assignee_id ?? undefined, done: r.done,
+    createdAt: Date.parse(r.created_at),
+    expectedDate: r.expected_date ?? undefined,
+    promisedDate: r.promised_date ?? undefined,
+    effortDays: r.effort_days ?? undefined,
+  };
 }
 function mapHistory(r: Row): HistoryEntry {
   return { id: r.id, at: Date.parse(r.at), byId: r.by_id, fromStage: r.from_stage, toStage: r.to_stage, fromStatus: r.from_status, toStatus: r.to_status, note: r.note ?? undefined };
@@ -237,8 +243,26 @@ export function toggleSubtask(id: string, subId: string) {
 
 export function addSubtask(id: string, sub: Omit<SubTask, "id">) {
   if (!supabase) return;
-  supabase.from("subtasks").insert({ project_id: id, title: sub.title, team: sub.team, assignee_id: sub.assigneeId ?? null, done: sub.done }).then(({ error }) => {
+  supabase.from("subtasks").insert({
+    project_id: id, title: sub.title, team: sub.team, assignee_id: sub.assigneeId ?? null, done: sub.done,
+    expected_date: sub.expectedDate ?? null,
+  }).then(({ error }) => {
     if (error) writeFailed("Sub-task didn't save", error.message); else fetchAll();
+  });
+}
+
+export type SubtaskPatch = Partial<Pick<SubTask, "promisedDate" | "effortDays" | "expectedDate">>;
+
+export function updateSubtask(id: string, subId: string, patch: SubtaskPatch) {
+  const p = findProject(id); if (!p) return;
+  localPatch(id, { subtasks: p.subtasks.map((s) => (s.id === subId ? { ...s, ...patch } : s)) });
+  if (!supabase) return;
+  const row: Row = {};
+  if ("promisedDate" in patch) row.promised_date = patch.promisedDate ?? null;
+  if ("effortDays" in patch) row.effort_days = patch.effortDays ?? null;
+  if ("expectedDate" in patch) row.expected_date = patch.expectedDate ?? null;
+  supabase.from("subtasks").update(row).eq("id", subId).then(({ error }) => {
+    if (error) writeFailed("Sub-task update failed", error.message);
   });
 }
 

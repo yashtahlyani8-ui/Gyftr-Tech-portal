@@ -51,6 +51,9 @@ export function removeSubtask(...args: Parameters<typeof local.removeSubtask>) {
 export function reassignSubtask(...args: Parameters<typeof local.reassignSubtask>) {
   return isCloud ? cloud.reassignSubtask(...args) : local.reassignSubtask(...args);
 }
+export function updateSubtask(...args: Parameters<typeof local.updateSubtask>) {
+  return isCloud ? cloud.updateSubtask(...args) : local.updateSubtask(...args);
+}
 export function updateDetails(...args: Parameters<typeof local.updateDetails>) {
   return isCloud ? cloud.updateDetails(...args) : local.updateDetails(...args);
 }

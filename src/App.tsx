@@ -35,12 +35,12 @@ function Toasts() {
 }
 
 const META: Record<ViewKey, { label: string; Icon: typeof Inbox; h: string; s: string }> = {
-  queue:       { label: "My Queue",     Icon: Inbox,          h: "My Queue",     s: "Everything waiting in your court, most urgent first" },
-  team:        { label: "My Team",      Icon: Users,          h: "My Team",      s: "Projects your team is involved in" },
-  overview:    { label: "Overview",     Icon: LayoutDashboard, h: "Overview",    s: "Portfolio health, ownership and ageing at a glance" },
-  board:       { label: "Flow Board",   Icon: KanbanSquare,   h: "Flow Board",   s: "The whole pipeline — drag a project to move it along" },
-  list:        { label: "All Projects", Icon: Table2,         h: "All Projects", s: "The PM sheet, live — every column, filterable, exportable" },
-  escalations: { label: "Escalations",  Icon: AlertOctagon,   h: "Escalations",  s: "Blocked, overdue and SLA-breaching — who to chase" },
+  queue:       { label: "My Queue",      Icon: Inbox,          h: "My Queue",      s: "Projects in your court + subtasks assigned to you" },
+  team:        { label: "My Projects",   Icon: Users,          h: "My Projects",   s: "Projects you are contributing to" },
+  overview:    { label: "Dashboard",     Icon: LayoutDashboard, h: "Dashboard",    s: "Health, tasks, and progress at a glance" },
+  board:       { label: "Flow Board",    Icon: KanbanSquare,   h: "Flow Board",    s: "The whole pipeline — drag a project to move it along" },
+  list:        { label: "All Projects",  Icon: Table2,         h: "All Projects",  s: "The PM sheet, live — every column, filterable, exportable" },
+  escalations: { label: "Escalations",   Icon: AlertOctagon,   h: "Escalations",   s: "Blocked, overdue and SLA-breaching — who to chase" },
 };
 
 export default function App() {
@@ -78,7 +78,9 @@ export default function App() {
 
   const lobs = useMemo(() => [...new Set(projects.map((p) => p.lob))].sort(), [projects]);
   const partners = useMemo(() => [...new Set(projects.map((p) => p.partner))].sort(), [projects]);
-  const myCount = useMemo(() => (me ? projects.filter((p) => isMine(me, p)).length : 0), [projects, me]);
+  const myProjectCount = useMemo(() => (me ? projects.filter((p) => isMine(me, p)).length : 0), [projects, me]);
+  const mySubCount = useMemo(() => (me ? projects.flatMap((p) => p.subtasks.filter((s) => s.assigneeId === me.id && !s.done)).length : 0), [projects, me]);
+  const myCount = myProjectCount + mySubCount;
   const escCount = useMemo(() => projects.filter((p) =>
     p.stage !== "live" && (openLeadershipNote(p) || p.blocked || overdueInfo(p.sacrosanctGoLive, p.targetGoLive, false).overdue ||
       aging(daysBetween(p.stageEnteredAt), STAGE_BY_ID[p.stage].slaDays) === "breach")).length, [projects]);
@@ -166,7 +168,7 @@ export default function App() {
             <div className="topbar">
               <div>
                 <div className="crumb">Gyftr Tech Portal · {TEAMS[me.team].label}</div>
-                <h1>{active === "team" ? `My Team · ${TEAMS[me.team].label}` : m.h}</h1>
+                <h1>{active === "team" ? `My Projects · ${TEAMS[me.team].label}` : m.h}</h1>
                 <div className="sub">{m.s}</div>
               </div>
               <div className="spacer" />
@@ -179,7 +181,7 @@ export default function App() {
             <div className="content">
               {active === "queue" && <MyQueue projects={projects} me={me} onOpen={setOpenId} />}
               {active === "team" && <Board projects={filtered} me={me} onOpen={setOpenId} />}
-              {active === "overview" && <Dashboard projects={projects} onOpen={setOpenId} />}
+              {active === "overview" && <Dashboard projects={isOverseer(me) ? projects : base} me={me} onOpen={setOpenId} />}
               {active === "board" && <Board projects={filtered} me={me} onOpen={setOpenId} />}
               {active === "list" && <TableView projects={filtered} onOpen={setOpenId} />}
               {active === "escalations" && <Escalations projects={projects} onOpen={setOpenId} />}

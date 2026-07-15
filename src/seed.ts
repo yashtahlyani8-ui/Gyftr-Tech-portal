@@ -4,16 +4,30 @@ import type { Person, Project } from "./types";
 import { DAY } from "./lib";
 
 export const PEOPLE: Person[] = [
-  { id: "u_anjali",   name: "Anjali Gupta",  team: "business",    role: "lead",       email: "anjali.gupta@gyftr.net" },
+  // ── Business ──
+  { id: "u_neha",     name: "Neha",          team: "business",    role: "lead",       email: "neha@gyftr.net" },         // Business Head
+  { id: "u_anjali",   name: "Anjali Gupta",  team: "business",    role: "lead",       email: "anjali.gupta@gyftr.net" }, // Business SPOC
+  { id: "u_biz1",     name: "Priya Sharma",  team: "business",    role: "member",     email: "priya.sharma@gyftr.net" },
+  { id: "u_biz2",     name: "Rahul Joshi",   team: "business",    role: "member",     email: "rahul.joshi@gyftr.net" },
+  // ── Product ──
+  { id: "u_saurabh",  name: "Saurabh",       team: "product",     role: "lead",       email: "saurabh@gyftr.net" },      // Product Lead
+  { id: "u_sid",      name: "Siddharth",     team: "product",     role: "member",     email: "siddharth@gyftr.net" },
   { id: "u_yash",     name: "Yash Tahlyani", team: "product",     role: "member",     email: "yash.tahlyani@gyftr.net" },
-  { id: "u_harshita", name: "Harshita",      team: "tech_spoc",   role: "lead",       email: "harshita@gyftr.net" },
-  { id: "u_sid",      name: "Siddharth",     team: "product",     role: "lead",       email: "siddharth@gyftr.net" },
+  // ── Tech SPOC (managers) ──
+  { id: "u_rajneesh", name: "Rajneesh",      team: "tech_spoc",   role: "pmo",        email: "rajneesh@gyftr.net" },     // CTO — sees everything
+  { id: "u_harshita", name: "Harshita",      team: "tech_spoc",   role: "lead",       email: "harshita@gyftr.net" },     // Tech Manager 1
+  { id: "u_mgr2",     name: "Deepak",        team: "tech_spoc",   role: "lead",       email: "deepak@gyftr.net" },       // Tech Manager 2
+  { id: "u_mgr3",     name: "Sameer",        team: "tech_spoc",   role: "lead",       email: "sameer@gyftr.net" },       // Tech Manager 3
+  { id: "u_mgr4",     name: "Pankaj",        team: "tech_spoc",   role: "lead",       email: "pankaj@gyftr.net" },       // Tech Manager 4
+  // ── Development ──
   { id: "u_raj",      name: "Raj",           team: "development", role: "member",     email: "raj@gyftr.net" },
   { id: "u_anmol",    name: "Anmol",         team: "development", role: "member",     email: "anmol@gyftr.net" },
   { id: "u_vikas",    name: "Vikas",         team: "development", role: "member",     email: "vikas@gyftr.net" },
+  // ── Design / QA ──
   { id: "u_rajkumar", name: "Rajkumar",      team: "design",      role: "member",     email: "rajkumar@gyftr.net" },
   { id: "u_pooja",    name: "Pooja",         team: "qa",          role: "member",     email: "pooja@gyftr.net" },
   { id: "u_karan",    name: "Karan",         team: "qa",          role: "lead",       email: "karan@gyftr.net" },
+  // ── Overseers ──
   { id: "u_pmo",      name: "PMO Office",    team: "leadership",  role: "pmo",        email: "pmo@gyftr.net" },
   { id: "u_ceo",      name: "Leadership",    team: "leadership",  role: "leadership", email: "leadership@gyftr.net" },
 ];

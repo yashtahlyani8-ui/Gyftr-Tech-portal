@@ -60,6 +60,9 @@ export interface SubTask {
   assigneeId?: string;   // specific person, not just the team
   done: boolean;
   createdAt?: number;
+  expectedDate?: string;  // set by assigner — target completion date
+  promisedDate?: string;  // set by assignee — their committed date
+  effortDays?: number;    // set by assignee — estimated effort in man-days
 }
 
 export interface HistoryEntry {

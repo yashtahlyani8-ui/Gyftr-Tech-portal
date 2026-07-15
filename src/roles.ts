@@ -41,11 +41,16 @@ export function teamsInvolved(proj: Project): Set<TeamId> {
   return teams;
 }
 
-/** Can this person even see this project? */
+/** Can this person even see this project?
+ *  - Overseers (pmo/leadership): everything
+ *  - Lead: everything their team has ever touched
+ *  - Member: only projects they personally own/raised or have a subtask assigned */
 export function visibleTo(me: Person, proj: Project): boolean {
   if (isOverseer(me)) return true;
   if (proj.businessOwnerId === me.id || proj.ownerId === me.id) return true;
-  return teamsInvolved(proj).has(me.team);
+  if (proj.subtasks.some((s) => s.assigneeId === me.id)) return true;
+  if (me.role === "lead") return teamsInvolved(proj).has(me.team);
+  return false;
 }
 
 export function visibleProjects(me: Person, projects: Project[]): Project[] {
@@ -53,10 +58,12 @@ export function visibleProjects(me: Person, projects: Project[]): Project[] {
 }
 
 /** Navigation is role-specific — contributors and overseers get different apps.
- *  Everyone gets the sheet-style "All Projects" table (contributors see it
- *  scoped to their involvement) — that view + CSV export is what retires the Excel. */
+ *  Everyone gets a dashboard + all-projects table; overseers also get
+ *  the org-wide board and escalations list. */
 export function navFor(me: Person): ViewKey[] {
-  return isOverseer(me) ? ["overview", "board", "list", "escalations"] : ["queue", "team", "list"];
+  return isOverseer(me)
+    ? ["overview", "board", "list", "escalations"]
+    : ["overview", "queue", "team", "list"];
 }
 
 export function homeView(me: Person): ViewKey {

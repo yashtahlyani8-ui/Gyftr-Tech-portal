@@ -43,10 +43,13 @@ export function teamsInvolved(proj: Project): Set<TeamId> {
 
 /** Can this person even see this project?
  *  - Overseers (pmo/leadership): everything
+ *  - Anyone whose TEAM currently holds the court: yes — My Queue lists these and
+ *    they're actionable by the whole court team, so they must always open
  *  - Lead: everything their team has ever touched
- *  - Member: only projects they personally own/raised or have a subtask assigned */
+ *  - Member: additionally only projects they personally own/raised or have a subtask on */
 export function visibleTo(me: Person, proj: Project): boolean {
   if (isOverseer(me)) return true;
+  if (isMine(me, proj)) return true;
   if (proj.businessOwnerId === me.id || proj.ownerId === me.id) return true;
   if (proj.subtasks.some((s) => s.assigneeId === me.id)) return true;
   if (me.role === "lead") return teamsInvolved(proj).has(me.team);

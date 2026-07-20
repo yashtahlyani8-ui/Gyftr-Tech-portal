@@ -106,7 +106,10 @@ create table subtasks (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade,
   title text not null, team team_id not null, assignee_id uuid references people(id),
-  done boolean not null default false, created_at timestamptz not null default now()
+  done boolean not null default false, created_at timestamptz not null default now(),
+  expected_date date,   -- set by the assigner: when they need it done by
+  promised_date date,   -- set by the assignee: their own committed date
+  effort_days   int     -- set by the assignee: estimated effort
 );
 
 -- Assigning a sub-task to a team makes the project visible to that team
@@ -172,16 +175,73 @@ alter table attachments   enable row level security;
 -- grows, and the actor's team is already in it (added the moment they became owner), so
 -- this still rejects teams that were never part of the project while allowing every
 -- legitimate transition.
+--
+-- Product leads are also let in on ANY project (not just their own court) so they can
+-- renegotiate go-live dates with a partner without waiting on whichever team holds the
+-- ball — RLS only decides row reachability here; enforce_project_update_scope() below
+-- is what actually restricts them to touching just the date columns.
 create policy p_sel on projects for select using ( is_overseer() or my_team() = any(involved_teams) );
 create policy p_ins on projects for insert with check ( is_pmo() or my_team() in ('business','product','tech_spoc') );
 create policy p_upd on projects for update
-  using ( is_pmo() or my_team() = owner_team or (stage = 'to_be_picked' and my_team() = 'development') )
-  with check ( is_pmo() or my_team() = any(involved_teams) );
+  using (
+    is_pmo() or my_team() = owner_team or (stage = 'to_be_picked' and my_team() = 'development')
+    or (my_role() = 'lead' and my_team() = 'product')
+  )
+  with check (
+    is_pmo() or my_team() = any(involved_teams)
+    or (my_role() = 'lead' and my_team() = 'product')
+  );
 create policy p_del on projects for delete using ( is_pmo() );
 
--- children: readable if the project is visible; writable only by in-court team / pmo
+-- Column-level guard for the product-lead-anywhere case above: everyone who
+-- reaches this point via the normal in-court/pmo path is waved through
+-- untouched; a product lead acting outside their own court may change go-live
+-- dates and nothing else. auth.uid() is null for admin/service connections
+-- (Management API, SQL editor, migrations) — those always bypass, same as
+-- superusers bypass RLS; this is a plain trigger, so it needs its own escape
+-- hatch or it would block legitimate admin fixes too.
+create or replace function enforce_project_update_scope() returns trigger language plpgsql as $$
+begin
+  if auth.uid() is null then return new; end if;
+  if is_pmo() or my_team() = old.owner_team or (old.stage = 'to_be_picked' and my_team() = 'development') then
+    return new;
+  end if;
+  if my_role() = 'lead' and my_team() = 'product' then
+    if new.title is distinct from old.title
+      or new.brd is distinct from old.brd
+      or new.partner is distinct from old.partner
+      or new.lob is distinct from old.lob
+      or new.priority is distinct from old.priority
+      or new.bifurcation is distinct from old.bifurcation
+      or new.stage is distinct from old.stage
+      or new.status is distinct from old.status
+      or new.owner_id is distinct from old.owner_id
+      or new.business_owner_id is distinct from old.business_owner_id
+      or new.blocked is distinct from old.blocked
+      or new.block_reason is distinct from old.block_reason
+      or new.priority_month is distinct from old.priority_month
+      or new.dev_effort_days is distinct from old.dev_effort_days
+      or new.reason_for_delay is distinct from old.reason_for_delay
+      or new.product_spoc_id is distinct from old.product_spoc_id
+      or new.tech_lead_id is distinct from old.tech_lead_id
+      or new.sacrosanct_go_live is distinct from old.sacrosanct_go_live
+    then
+      raise exception 'Product leads may only edit go-live dates (Expected / Timeline ETA) outside their own court';
+    end if;
+    return new;
+  end if;
+  raise exception 'insufficient_privilege';
+end;
+$$;
+create trigger trg_enforce_update before update on projects
+  for each row execute function enforce_project_update_scope();
+
+-- children: readable if the project is visible; writable only by in-court team / pmo,
+-- OR (subtasks only) the person that sub-task is assigned to — so an assignee can
+-- fill in their own promised date / effort without their team holding the court.
 create policy s_sel on subtasks      for select using ( can_see(project_id) );
-create policy s_wr  on subtasks      for all    using ( can_act(project_id) ) with check ( can_act(project_id) );
+create policy s_wr  on subtasks      for all    using ( can_act(project_id) or assignee_id = (select id from people where auth_id = auth.uid()) )
+                                                 with check ( can_act(project_id) or assignee_id = (select id from people where auth_id = auth.uid()) );
 create policy h_sel on stage_history for select using ( can_see(project_id) );
 create policy h_ins on stage_history for insert with check ( can_act(project_id) );
 
@@ -231,19 +291,6 @@ $$;
 -- emails/Slacks the current owner + PMO on breach; a trigger on `comments`
 -- where pinned = true notifies the owning team of a leadership priority note.
 
--- ══════════════════════════════════════════════════════════════
--- Migration: subtask date + effort fields (run once on existing DBs)
--- ══════════════════════════════════════════════════════════════
--- alter table subtasks add column if not exists expected_date date;
--- alter table subtasks add column if not exists promised_date date;
--- alter table subtasks add column if not exists effort_days int;
-
--- Migration: role_id enum — add 'manager' if you want a distinct manager tier
--- (currently managers use 'lead' + team='tech_spoc'; this is optional)
+-- Optional future migration: role_id enum — add 'manager' if you want a
+-- distinct manager tier (currently managers use 'lead' + team='tech_spoc').
 -- alter type role_id add value if not exists 'manager';
-
--- Migration: RLS update for subtasks — allow assignees to update their own subtask dates/effort
--- drop policy if exists s_wr on subtasks;
--- create policy s_wr on subtasks for all
---   using (can_act(project_id) or assignee_id = (select id from people where auth_id = auth.uid()))
---   with check (can_act(project_id) or assignee_id = (select id from people where auth_id = auth.uid()));

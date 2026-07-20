@@ -43,16 +43,17 @@ export function teamsInvolved(proj: Project): Set<TeamId> {
 
 /** Can this person even see this project?
  *  - Overseers (pmo/leadership): everything
- *  - Anyone whose TEAM currently holds the court: yes — My Queue lists these and
- *    they're actionable by the whole court team, so they must always open
- *  - Lead: everything their team has ever touched
- *  - Member: additionally only projects they personally own/raised or have a subtask on */
+ *  - Everyone on a team the project has ever involved: yes, lead or member alike —
+ *    the database (RLS p_sel) has never distinguished role for visibility, only
+ *    team; a client-only "members see personal items only" restriction here would
+ *    just hide things the server would happily return, which is its own bug
+ *  - Anyone personally named (raised it, owns it, or has a sub-task on it), even
+ *    on an uninvolved team — covers e.g. a QA person given a Design sub-task */
 export function visibleTo(me: Person, proj: Project): boolean {
   if (isOverseer(me)) return true;
-  if (isMine(me, proj)) return true;
+  if (teamsInvolved(proj).has(me.team)) return true;
   if (proj.businessOwnerId === me.id || proj.ownerId === me.id) return true;
   if (proj.subtasks.some((s) => s.assigneeId === me.id)) return true;
-  if (me.role === "lead") return teamsInvolved(proj).has(me.team);
   return false;
 }
 

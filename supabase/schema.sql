@@ -243,7 +243,16 @@ create policy s_sel on subtasks      for select using ( can_see(project_id) );
 create policy s_wr  on subtasks      for all    using ( can_act(project_id) or assignee_id = (select id from people where auth_id = auth.uid()) )
                                                  with check ( can_act(project_id) or assignee_id = (select id from people where auth_id = auth.uid()) );
 create policy h_sel on stage_history for select using ( can_see(project_id) );
-create policy h_ins on stage_history for insert with check ( can_act(project_id) );
+-- NOT can_act(project_id): a transition fires the projects UPDATE and this
+-- history INSERT as two independent, un-awaited requests (see transition() in
+-- cloudStore.ts). can_act() reads the CURRENT owner_team, which flips to the
+-- RECEIVING team the instant the projects UPDATE commits — so if that commits
+-- first, the outgoing team's own history entry for the handoff they just made
+-- gets rejected by RLS. involved_teams only ever grows and already contained
+-- the outgoing team before they acted, so it's race-proof.
+create policy h_ins on stage_history for insert with check (
+  is_pmo() or exists ( select 1 from projects p where p.id = project_id and my_team() = any(p.involved_teams) )
+);
 
 -- comments: anyone who can SEE the project may comment (incl. leadership); only in-court/pmo can resolve
 create policy c_sel on comments for select using ( can_see(project_id) );

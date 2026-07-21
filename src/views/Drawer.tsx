@@ -218,7 +218,14 @@ export function Drawer({ project, me, onClose }: { project: Project; me: Person;
   const anyAction = availableForwards.length > 0 || canBack || canEdit;
 
   const doTransition = (spec: TransitionSpec, ownerId: string) => {
-    if (spec.to === "scoping" && !reason.trim()) {
+    // Reason is only required when sending something BACK to Product (Return to
+    // Product / Ask Product to clarify) — both happen to target "scoping" too,
+    // same as the plain forward "Submit to Product" out of Intake. Gating on
+    // spec.to alone caught that forward move as well: the primary button has no
+    // reason field anywhere near it (it only renders in the back-transitions
+    // section), so clicking "Submit to Product" set the error flag and silently
+    // did nothing — no transition, no visible feedback, looked completely dead.
+    if (spec.kind !== "forward" && spec.to === "scoping" && !reason.trim()) {
       setReasonError(true);
       return;
     }
